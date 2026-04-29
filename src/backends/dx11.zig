@@ -998,7 +998,7 @@ pub fn backend(self: Context) dvui.Backend {
 }
 
 pub fn nanoTime(_: Context) i128 {
-    return std.time.nanoTimestamp();
+    return std.Io.Clock.boot.now(dvui.io).nanoseconds;
 }
 
 pub fn sleep(_: Context, ns: u64) void {
@@ -1693,7 +1693,7 @@ pub fn main() !void {
 
     const window_class = win32.L("DvuiWindow");
 
-    var gpa_instance = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa_instance: std.heap.DebugAllocator(.{}) = .init;
     const gpa = gpa_instance.allocator();
     defer _ = gpa_instance.deinit();
 

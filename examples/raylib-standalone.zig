@@ -7,7 +7,7 @@ comptime {
 
 const window_icon_png = @embedFile("zig-favicon.png");
 
-var gpa_instance = std.heap.GeneralPurposeAllocator(.{}){};
+var gpa_instance: std.heap.DebugAllocator(.{}) = .init;
 const gpa = gpa_instance.allocator();
 
 const vsync = true;
@@ -20,7 +20,7 @@ pub const c = RaylibBackend.c;
 /// This example shows how to use the dvui for a normal application:
 /// - dvui renders the whole application
 /// - render frames only when needed
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     if (@import("builtin").os.tag == .windows) { // optional
         // on windows graphical apps have no console, so output goes to nowhere - attach it manually. related: https://github.com/ziglang/zig/issues/4196
         dvui.Backend.Common.windowsAttachConsole() catch {};
@@ -31,6 +31,7 @@ pub fn main() !void {
     // init Raylib backend (creates OS window)
     // initWindow() means the backend calls CloseWindow for you in deinit()
     var backend = try RaylibBackend.initWindow(.{
+        .io = init.io,
         .gpa = gpa,
         .size = .{ .w = 800.0, .h = 600.0 },
         .vsync = vsync,

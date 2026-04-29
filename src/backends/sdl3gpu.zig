@@ -2014,7 +2014,7 @@ pub fn main() !u8 {
 const CallbackState = struct {
     win: dvui.Window,
     back: SDLBackend,
-    gpa: std.heap.GeneralPurposeAllocator(.{}) = .init,
+    gpa: std.heap.DebugAllocator(.{}) = .init,
     interrupted: bool = false,
     have_resize: bool = false,
     no_wait: bool = false,
