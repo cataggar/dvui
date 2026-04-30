@@ -20,7 +20,7 @@ jobs:
     name: Test
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your codebase can be accessed
       - uses: actions/checkout@v4
       # uses .minimum_zig_version from build.zig.zon
       - uses: mlugg/setup-zig@v2
