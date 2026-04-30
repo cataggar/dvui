@@ -12,7 +12,7 @@ const log = std.log.scoped(.Dx11Ontop);
 
 var backend_attached = false;
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     if (@import("builtin").os.tag == .windows) { // optional
         // on windows graphical apps have no console, so output goes to nowhere - attach it manually. related: https://github.com/ziglang/zig/issues/4196
         dvui.Backend.Common.windowsAttachConsole() catch {};
@@ -24,7 +24,7 @@ pub fn main() !void {
 
     log.info("Successfully created device.", .{});
     var window_state: Backend.WindowState = undefined;
-    const backend = Backend.attach(wnd, &window_state, gpa, options, .{ .vsync = false }) catch |e| @panic(@errorName(e));
+    const backend = Backend.attach(wnd, &window_state, gpa, options, .{ .vsync = false, .io = init.io }) catch |e| @panic(@errorName(e));
     defer backend.deinit();
     backend_attached = true;
 

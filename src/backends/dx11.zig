@@ -12,6 +12,7 @@ const log = std.log.scoped(.Dx11Backend);
 
 pub const WindowState = struct {
     vsync: bool,
+    io: std.Io,
 
     dvui_window: dvui.Window,
 
@@ -134,6 +135,8 @@ const DirectxOptions = struct {
 
 pub const InitOptions = struct {
     dvui_gpa: std.mem.Allocator,
+    /// Io backend and dvui should use, will be assigned to dvui.io.
+    io: std.Io,
     /// Passed to `dvui.Window.init`
     dvui_window_init_options: dvui.Window.InitOptions = .{},
     /// The allocator used for temporary allocations used during init()
@@ -277,6 +280,7 @@ pub fn initWindow(window_state: *WindowState, options: InitOptions) !Context {
     const create_args: CreateWindowArgs = .{
         .window_state = window_state,
         .vsync = options.vsync,
+        .io = options.io,
         .dvui_gpa = options.dvui_gpa,
         .dvui_window_init_options = options.dvui_window_init_options,
     };
@@ -997,12 +1001,12 @@ pub fn backend(self: Context) dvui.Backend {
     return dvui.Backend.init(self);
 }
 
-pub fn nanoTime(_: Context) i128 {
-    return std.Io.Clock.boot.now(dvui.io).nanoseconds;
+pub fn nanoTime(self: Context) i128 {
+    return std.Io.Clock.boot.now(stateFromHwnd(hwndFromContext(self)).io).nanoseconds;
 }
 
-pub fn sleep(_: Context, ns: u64) void {
-    std.Thread.sleep(ns);
+pub fn sleep(self: Context, ns: u64) void {
+    std.Io.Clock.Duration.sleep(.{ .clock = .boot, .raw = .fromNanoseconds(ns) }, stateFromHwnd(hwndFromContext(self)).io) catch {};
 }
 
 pub fn clipboardText(self: Context) ![]const u8 {
@@ -1165,6 +1169,7 @@ pub fn attach(
     dx_options: Directx11Options,
     opt: struct {
         vsync: bool,
+        io: std.Io,
         window_init_opts: dvui.Window.InitOptions = .{},
     },
 ) !Context {
@@ -1178,12 +1183,16 @@ pub fn attach(
     const addr: usize = @bitCast(win32.GetWindowLongPtrW(hwnd, win32.WINDOW_LONG_PTR_INDEX._USERDATA));
     if (addr == 0) @panic("unable to attach window state pointer to HWND, did you set cbWndExtra to be >= to @sizeof(usize)?");
 
+    dvui.io = opt.io;
+    window_state.io = opt.io;
+
     const ctx = contextFromHwnd(hwnd).backend();
 
     var dvui_window = try dvui.Window.init(@src(), gpa, ctx, opt.window_init_opts);
     errdefer dvui_window.deinit();
     window_state.* = .{
         .vsync = opt.vsync,
+        .io = opt.io,
         .dvui_window = dvui_window,
         .device = dx_options.device,
         .device_context = dx_options.device_context,
@@ -1216,6 +1225,7 @@ pub fn wndProc(
             // This call is what initializes window_state
             _ = attach(hwnd, args.window_state, args.dvui_gpa, dx_options, .{
                 .vsync = args.vsync,
+                .io = args.io,
                 .window_init_opts = args.dvui_window_init_options,
             }) catch |e| {
                 args.err = e;
@@ -1278,7 +1288,7 @@ pub fn wndProc(
 
             const is_button_down: bool = switch (msg) {
                 win32.WM_LBUTTONDOWN, win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_XBUTTONDOWN => true,
-                else => false
+                else => false,
             };
 
             // ensure mouse up signal is sent if cursor leaves window while held down
@@ -1362,7 +1372,7 @@ pub fn wndProc(
             };
             const info: KeystrokeMessageFlags = @bitCast(@as(i32, @truncate(lparam)));
 
-            if (std.meta.intToEnum(win32.VIRTUAL_KEY, wparam)) |as_vkey| {
+            if (std.enums.fromInt(win32.VIRTUAL_KEY, wparam)) |as_vkey| {
                 // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getasynckeystate
                 // NOTE: If the key is pressed, the most significant bit is set.
                 //       For a signed integer that means it's a negative number
@@ -1395,8 +1405,8 @@ pub fn wndProc(
                         .mod = mods,
                     }) catch {};
                 }
-            } else |err| {
-                log.err("invalid key found: {t}", .{err});
+            } else {
+                log.err("invalid key found: {d}", .{wparam});
             }
             return switch (msg) {
                 win32.WM_SYSKEYDOWN, win32.WM_SYSKEYUP => win32.DefWindowProcW(hwnd, umsg, wparam, lparam),
@@ -1492,6 +1502,7 @@ fn convertVertices(
 const CreateWindowArgs = struct {
     window_state: *WindowState,
     vsync: bool,
+    io: std.Io,
     dvui_window_init_options: dvui.Window.InitOptions,
     dvui_gpa: std.mem.Allocator,
     err: ?anyerror = null,
@@ -1686,23 +1697,21 @@ fn convertVKeyToDvuiKey(vkey: win32.VIRTUAL_KEY) dvui.enums.Key {
 }
 
 /// This is what is run if you are using `dvui.App` with this backend.
-pub fn main() !void {
+pub fn main(main_init: std.process.Init) !void {
+    dvui.App.main_init = main_init;
     dvui.Backend.Common.windowsAttachConsole() catch {};
 
     const app = dvui.App.get() orelse return error.DvuiAppNotDefined;
+    const init_opts = app.config.get();
+    const gpa = init_opts.gpa orelse main_init.gpa;
+    const io = init_opts.io orelse main_init.io;
 
     const window_class = win32.L("DvuiWindow");
-
-    var gpa_instance: std.heap.DebugAllocator(.{}) = .init;
-    const gpa = gpa_instance.allocator();
-    defer _ = gpa_instance.deinit();
 
     RegisterClass(window_class, .{}) catch win32.panicWin32(
         "RegisterClass",
         win32.GetLastError(),
     );
-
-    const init_opts = app.config.get();
 
     var window_state: WindowState = undefined;
 
@@ -1710,6 +1719,7 @@ pub fn main() !void {
     const b = try initWindow(&window_state, .{
         .registered_class = window_class,
         .dvui_gpa = gpa,
+        .io = io,
         .dvui_window_init_options = init_opts.window_init_options,
         .allocator = gpa,
         .size = init_opts.size,
