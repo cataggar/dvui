@@ -2,10 +2,11 @@ name: Test
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the $default-branch branch
+  # Triggers the workflow on push or pull request events for the zig16 branch
   push:
-    branches: [$default-branch]
+    branches: [zig16]
   pull_request:
+    branches: [zig16]
   workflow_dispatch:
 
 # Only one ci action should run per branch at any one time
