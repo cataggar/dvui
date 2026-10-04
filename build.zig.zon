@@ -2,7 +2,7 @@
     .name = .dvui,
     .fingerprint = 0xa35affe599490101,
     .version = "0.5.0-dev",
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .paths = .{
         "LICENSE",
         "README.md",
@@ -15,11 +15,16 @@
         "readme-implementation.md",
         "readme-raylib-zig-custom.md",
         "src",
+        "tests",
         "tools",
         "tsconfig.json",
         "vendor",
     },
     .dependencies = .{
+        .translate_c = .{
+            .url = "git+https://github.com/cataggar/translate-c#62d06a5d3e93c82727544e8113e4762a315ca0ed",
+            .hash = "translate_c-2.0.0-Q_BUWlpOBwBWvgGBM20tJq-GXgPio3v3UD39rXEn70KN",
+        },
         .sdl = .{
             .url = "git+https://github.com/david-vanderson/SDL#b25735a465f7db1c160d2eca8ac46dde9ec41cfb",
             .hash = "SDL-2.32.10-JToi37G3EgG0eraPos4vhCwC6vVgyB1FYf1SxxhpBr_Y",

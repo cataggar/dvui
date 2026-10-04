@@ -2,7 +2,25 @@
 
 [Zig](https://ziglang.org) GUI toolkit for whole applications or debugging windows in existing apps/games.
 
-Tested with Zig v0.16.0 (for Zig v0.15.2, use DVUI [tag v0.4.0](https://github.com/david-vanderson/dvui/releases/tag/v0.4.0)).
+The custom/testing-backend compatibility branch targets Zig v0.17.0.
+Core C bindings are generated with the exact pinned `cataggar/translate-c`
+2.0.0 and its GitHub Aro mirror. Consumers constructing a DVUI module manually
+must import the dependency module's `dvui-c` bindings as well as its options.
+Optional platform backends and their pinned dependencies need separate native
+acceptance; this port does not refresh those dependencies.
+
+The focused host consumer check exercises typed data, reflected option
+overrides, generated C bindings, and caller-owned text storage without a
+display, TVG, or optional native dependencies:
+
+```sh
+zig build test-custom -j2 -Dbackend=testing -Dtvg=false -Dfreetype=false \
+    -Dtiny-file-dialogs=false -Dtree-sitter=false
+```
+
+The full legacy `test` graph still references TVG-only declarations when TVG
+is disabled. Its optional dependency and platform-backend acceptance are not
+covered by this focused custom-backend check.
 
 [Homepage](https://david-vanderson.github.io) · [Demo](https://david-vanderson.github.io/demo) · [Docs](https://david-vanderson.github.io/docs/) · [Devlog](https://david-vanderson.github.io/log/2026)
 

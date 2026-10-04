@@ -43,7 +43,7 @@ fn addAndroidLibC(
             .x86_64 => "x86_64-linux-android",
             .arm => "arm-linux-androideabi",
             .aarch64 => "aarch64-linux-android",
-            else => @panic("Unkown Android arch")
+            else => @panic("Unkown Android arch"),
         };
 
         mod.addSystemIncludePath(include_path.path(opts.b, arch_specific_path));
@@ -134,14 +134,18 @@ pub fn build(b: *std.Build) !void {
         "snapshot_image_suffix",
         b.option([]const u8, "snapshot-images", "When this name is defined, dvui.testing.snapshot will save an image ending with the string provided"),
     );
-    build_options.addOption(
-        ?[]const u8,
-        "image_dir",
-        if (generate_doc_images)
-            b.getInstallPath(.prefix, "docs")
-        else
+    if (generate_doc_images) {
+        build_options.addOptionPathUntracked("image_dir", .{ .relative = .{
+            .base = .install_prefix,
+            .sub_path = "docs",
+        } });
+    } else {
+        build_options.addOption(
+            ?[]const u8,
+            "image_dir",
             b.option([]const u8, "image-dir", "Default directory for dvui.testing.saveImage"),
-    );
+        );
+    }
     build_options.addOption(
         ?u8,
         "log_stack_trace",
@@ -354,6 +358,16 @@ pub fn buildBackend(backend: Backend, test_dvui_and_app: bool, dvui_opts_in: Dvu
             }
 
             linkBackend(dvui_testing, testing_mod);
+            const consumer_tests = b.addTest(.{
+                .name = "custom-backend-consumer",
+                .root_module = b.createModule(.{
+                    .root_source_file = b.path("tests/custom_backend.zig"),
+                    .target = target,
+                    .optimize = optimize,
+                    .imports = &.{.{ .name = "dvui", .module = dvui_testing }},
+                }),
+            });
+            b.step("test-custom", "Test custom-backend consumer and reflection").dependOn(&b.addRunArtifact(consumer_tests).step);
             const example_opts: ExampleOptions = .{
                 .dvui_mod = dvui_testing,
                 .backend_name = "testing-backend",
@@ -880,7 +894,7 @@ pub fn linkBackend(dvui_mod: *std.Build.Module, backend_mod: *std.Build.Module) 
 const DvuiModuleOptions = struct {
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
     check_step: ?*std.Build.Step = null,
     test_step: ?*std.Build.Step = null,
     test_filters: []const []const u8,
@@ -1067,6 +1081,18 @@ pub fn addDvuiModule(
                 dvui_mod.addLibraryPath(accessKitPath(b, target, ak_dep, opts.accesskit, false));
             }
             dvui_mod.linkSystemLibrary("accesskit", .{});
+            const accesskit_c: @import("translate_c").Translator = .init(b.dependency("translate_c", .{}), .{
+                .name = "accesskit-c",
+                .c_source_file = b.addWriteFiles().add("accesskit-c.h",
+                    \\#define __mingw_current_teb ___mingw_current_teb
+                    \\#include <accesskit.h>
+                    \\
+                ),
+                .target = target,
+                .optimize = optimize,
+            });
+            accesskit_c.addIncludePath(ak_dep.path("include"));
+            dvui_mod.addImport("accesskit-c", accesskit_c.mod);
 
             if (target.result.os.tag == .linux) {
                 dvui_mod.linkSystemLibrary("unwind", .{});
@@ -1159,6 +1185,39 @@ pub fn addDvuiModule(
         }
     }
 
+    const bindings: @import("translate_c").Translator = .init(b.dependency("translate_c", .{}), .{
+        .name = "dvui-c",
+        .c_source_file = b.addWriteFiles().add("dvui-c.h", b.fmt(
+            \\#define _SETJMP_H 1
+            \\{s}
+            \\{s}
+            \\#include <stb_image.h>
+            \\#include <stb_image_write.h>
+            \\{s}
+            \\{s}
+            \\
+        , .{
+            if (freetype)
+                "#include <freetype/ftadvanc.h>\n#include <freetype/ftbbox.h>\n#include <freetype/ftbitmap.h>\n#include <freetype/ftcolor.h>\n#include <freetype/ftlcdfil.h>\n#include <freetype/ftsizes.h>\n#include <freetype/ftstroke.h>\n#include <freetype/fttrigon.h>"
+            else
+                "#include <stb_truetype.h>",
+            if (libc) "" else "#define STBI_NO_STDIO 1\n#define STBI_NO_STDLIB 1\n#define STBIW_NO_STDLIB 1",
+            if (tfd) "#include <tinyfiledialogs.h>" else "",
+            if (tree_sitter) "#include <tree_sitter/api.h>" else "",
+        })),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = libc and !target.result.abi.isAndroid(),
+    });
+    for (dvui_mod.include_dirs.items) |include| {
+        switch (include) {
+            .path => |path| bindings.addIncludePath(path),
+            .path_system => |path| bindings.addSystemIncludePath(path),
+            .other_step => |lib| bindings.addIncludePath(lib.getEmittedIncludeTree()),
+            else => {},
+        }
+    }
+    dvui_mod.addImport("dvui-c", bindings.mod);
     return dvui_mod;
 }
 
@@ -1192,7 +1251,7 @@ fn addExample(
 
     if (opts.target.result.os.tag == .windows) {
         exe.win32_manifest = b.path("./src/main.manifest");
-        exe.subsystem = .Windows;
+        exe.subsystem = .windows;
 
         if (opts.accesskit.enabled()) {
             mod.linkSystemLibrary("ws2_32", .{});
@@ -1254,7 +1313,7 @@ fn addWebExample(
             .target = opts.target,
             .optimize = opts.optimize,
             .link_libc = false,
-            .strip = if (opts.optimize == .ReleaseFast or opts.optimize == .ReleaseSmall) true else false,
+            .strip = if (opts.optimize == .fast or opts.optimize == .small) true else false,
         }),
     };
     const web_test = b.addExecutable(exeOptions);
@@ -1322,7 +1381,7 @@ fn addWebExample(
 /// ```
 pub fn svgPathToTvgPath(b: *std.Build, svg_path: std.Build.LazyPath) std.Build.LazyPath {
     // use fast and native options since this is just for building
-    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
+    const optimize: std.lang.Optimize = .fast;
     const target: std.Build.ResolvedTarget = b.graph.host;
     const svg2tvg_dep = b.lazyDependency("svg2tvg", .{ .optimize = optimize, .target = target }).?;
     const svg2tvg_exe = b.addExecutable(.{

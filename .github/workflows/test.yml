@@ -23,7 +23,8 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
       # uses .minimum_zig_version from build.zig.zon
-      - uses: mlugg/setup-zig@v2
+      - shell: bash
+        run: bash .github/setup-zig.sh
 
       - name: Compile
         run: zig build -Dbackend=testing
@@ -53,7 +54,8 @@ jobs:
     name: Compile ${{ matrix.backend }}
     steps:
       - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
+      - shell: bash
+        run: bash .github/setup-zig.sh
 
       - name: Install libraries
         if: ${{ matrix.os == 'ubuntu-latest' && (matrix.backend == 'sdl2' || matrix.backend == 'sdl3' || matrix.backend == 'raylib') }}

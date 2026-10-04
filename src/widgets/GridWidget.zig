@@ -118,9 +118,9 @@ pub const CellOptions = struct {
     pub fn override(self: *const CellOptions, over: CellOptions) CellOptions {
         var ret = self.*;
 
-        inline for (@typeInfo(CellOptions).@"struct".fields) |f| {
-            if (@field(over, f.name)) |fval| {
-                @field(ret, f.name) = fval;
+        inline for (@typeInfo(CellOptions).@"struct".field_names) |name| {
+            if (@field(over, name)) |fval| {
+                @field(ret, name) = fval;
             }
         }
 
