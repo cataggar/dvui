@@ -9,9 +9,14 @@ must import the dependency module's `dvui-c` bindings as well as its options.
 Optional platform backends and their pinned dependencies need separate native
 acceptance; this port does not refresh those dependencies.
 
-The focused host consumer check exercises typed data, reflected option
+The focused host consumer target exercises typed data, reflected option
 overrides, generated C bindings, and caller-owned text storage without a
-display, TVG, or optional native dependencies:
+display or TVG. It previously passed 30 build steps and both consumer tests,
+but the current fetched dependency graph does not configure: the legacy
+SVG/z2d wrapper uses removed `install_prefix`, and default tree-sitter wrappers
+use removed `build_root`. Disabling their features does not make already
+fetched build scripts compatible. This command is the regression target, not
+current source acceptance:
 
 ```sh
 zig build test-custom -j2 -Dbackend=testing -Dtvg=false -Dfreetype=false \
@@ -20,7 +25,9 @@ zig build test-custom -j2 -Dbackend=testing -Dtvg=false -Dfreetype=false \
 
 The full legacy `test` graph still references TVG-only declarations when TVG
 is disabled. Its optional dependency and platform-backend acceptance are not
-covered by this focused custom-backend check.
+covered by the historical focused check. The source prerequisite remains
+blocked until the exact legacy wrapper graph and required platform checks
+pass; a newer z2d generation is not an automatic compatible replacement.
 
 [Homepage](https://david-vanderson.github.io) · [Demo](https://david-vanderson.github.io/demo) · [Docs](https://david-vanderson.github.io/docs/) · [Devlog](https://david-vanderson.github.io/log/2026)
 
