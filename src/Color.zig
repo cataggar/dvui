@@ -421,7 +421,8 @@ pub const PMAImage = struct {
     /// the render_alloc is used for temporary allocations in the render process
     pub fn fromTvgFile(dbg_name: []const u8, alloc: std.mem.Allocator, render_alloc: std.mem.Allocator, tvg_bytes: []const u8, height: u32, icon_opts: dvui.IconRenderOptions) !PMAImage {
         if (comptime !dvui.useTvg) {
-            comptime unreachable;
+            dvui.log.warn("fromTvgFile requires TVG support", .{});
+            return error.tvgError;
         }
         const ImageAdapter = struct {
             pixels: []u8,

@@ -1,17 +1,10 @@
 //! Creates Zig API mappings from "accesskit.h"
 //! These should be pasted at the end of AccessKit.zig
-//! Copy the latest accesskit.h file into the directory
-//! (or specify the include directory with -I below)
-//! Build with `zig build-exe accesskit_gen.zig -I. -lc`
+//! Translate the latest accesskit.h file into accesskit_c.zig with `zig translate-c`
+//! and build with `zig build-exe accesskit_gen.zig --dep accesskit_c -Mroot=accesskit_gen.zig -Maccesskit_c=accesskit_c.zig -lc`
 const std = @import("std");
 const builtin = @import("builtin");
-const c = @cImport({
-    @cDefine("__APPLE__", {});
-    @cDefine("__linux__", {});
-    if (builtin.os.tag == .windows)
-        @cDefine("_WIN32", {});
-    @cInclude("accesskit.h");
-});
+const c = @import("accesskit_c");
 
 // Replaces any clashes with zig keywords.
 var replacements: std.StaticStringMap([]const u8) = .initComptime(&.{

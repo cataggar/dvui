@@ -2,14 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const dvui = @import("dvui");
 
-pub const c = @cImport({
-    @cInclude("raylib.h");
-    @cInclude("raymath.h");
-    @cInclude("rlgl.h");
-    @cInclude("raygui.h");
-
-    @cInclude("glfw3.h");
-});
+pub const c = @import("raylib-c");
 
 pub const kind: dvui.enums.Backend = .raylib;
 
@@ -25,9 +18,9 @@ shader: c.Shader,
 VAO: u32,
 arena: std.mem.Allocator = undefined,
 log_events: bool = false,
-pressed_keys: std.bit_set.ArrayBitSet(u32, 512) = std.bit_set.ArrayBitSet(u32, 512).initEmpty(),
+pressed_keys: std.bit_set.ArrayBitSet(u32, 512) = .empty,
 pressed_modifier: dvui.enums.Mod = .none,
-mouse_button_cache: [RaylibMouseButtons.len]bool = .{false} ** RaylibMouseButtons.len,
+mouse_button_cache: [RaylibMouseButtons.len]bool = @splat(false),
 touch_position_cache: c.Vector2 = .{ .x = 0, .y = 0 },
 dvui_consumed_events: bool = false,
 cursor_last: dvui.enums.Cursor = .arrow,
@@ -406,14 +399,11 @@ pub fn textureFromTargetTemp(_: *RaylibBackend, texture: dvui.TextureTarget) dvu
 pub fn renderTarget(self: *RaylibBackend, texture: ?dvui.TextureTarget) !void {
     if (texture) |tex| {
         const texid = @intFromPtr(tex.ptr);
-        const target: c.RenderTexture2D = .{
-            .id = self.frame_buffers.get(@intCast(texid)) orelse return dvui.Backend.GenericError.BackendError,
-            .texture = .{
-                .id = @intCast(texid),
-                .width = @intCast(tex.width),
-                .height = @intCast(tex.height),
-            },
-        };
+        var target = std.mem.zeroes(c.RenderTexture2D);
+        target.id = self.frame_buffers.get(@intCast(texid)) orelse return dvui.Backend.GenericError.BackendError;
+        target.texture.id = @intCast(texid);
+        target.texture.width = @intCast(tex.width);
+        target.texture.height = @intCast(tex.height);
         self.fb_width = target.texture.width;
         self.fb_height = target.texture.height;
 
@@ -475,13 +465,13 @@ pub fn clipboardText(_: *RaylibBackend) ![]const u8 {
 }
 
 pub fn clipboardTextSet(self: *RaylibBackend, text: []const u8) !void {
-    const c_text = try self.arena.dupeZ(u8, text);
+    const c_text = try self.arena.dupeSentinel(u8, text, 0);
     defer self.arena.free(c_text);
     c.SetClipboardText(c_text.ptr);
 }
 
 pub fn openURL(self: *RaylibBackend, url: []const u8, _: bool) !void {
-    const c_url = try self.arena.dupeZ(u8, url);
+    const c_url = try self.arena.dupeSentinel(u8, url, 0);
     defer self.arena.free(c_url);
     c.OpenURL(c_url.ptr);
 }

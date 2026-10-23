@@ -4,24 +4,7 @@ const dvui = @import("dvui");
 
 const sdl_options = @import("sdl_options");
 pub const sdl3 = sdl_options.version.major == 3;
-pub const c = blk: {
-    if (sdl3) {
-        break :blk @cImport({
-            @cDefine("SDL_DISABLE_OLD_NAMES", {});
-            @cInclude("SDL3/SDL.h");
-
-            @cDefine("SDL_MAIN_HANDLED", {});
-            @cInclude("SDL3/SDL_main.h");
-        });
-    }
-    break :blk @cImport({
-        // Zig 0.16 bundled arm_vector_types.h uses __mfp8 builtin that
-        // translate-c can't resolve. Gate arm_neon.h include off.
-        @cDefine("SDL_DISABLE_ARM_NEON_H", "1");
-        @cInclude("SDL2/SDL_syswm.h");
-        @cInclude("SDL2/SDL.h");
-    });
-};
+pub const c = @import("sdl-c");
 
 /// Only available in sdl2
 extern "SDL_config" fn MACOS_enable_scroll_momentum() callconv(.c) void;
@@ -44,8 +27,8 @@ initial_scale: f32 = 1.0,
 last_pixel_size: dvui.Size.Physical = .{ .w = 800, .h = 600 },
 last_window_size: dvui.Size.Natural = .{ .w = 800, .h = 600 },
 cursor_last: dvui.enums.Cursor = .arrow,
-cursor_backing: [@typeInfo(dvui.enums.Cursor).@"enum".fields.len]?*c.SDL_Cursor = [_]?*c.SDL_Cursor{null} ** @typeInfo(dvui.enums.Cursor).@"enum".fields.len,
-cursor_backing_tried: [@typeInfo(dvui.enums.Cursor).@"enum".fields.len]bool = [_]bool{false} ** @typeInfo(dvui.enums.Cursor).@"enum".fields.len,
+cursor_backing: [@typeInfo(dvui.enums.Cursor).@"enum".field_names.len]?*c.SDL_Cursor = @splat(null),
+cursor_backing_tried: [@typeInfo(dvui.enums.Cursor).@"enum".field_names.len]bool = @splat(false),
 arena: std.mem.Allocator = undefined,
 
 pub const InitOptions = struct {
@@ -159,7 +142,11 @@ pub fn initWindow(options: InitOptions) !SDLBackend {
     // * rendering to a texture and then rendering the texture works the same
     // * any filtering happening across pixels won't bleed in transparent rgb values
     const pma_blend = c.SDL_ComposeCustomBlendMode(c.SDL_BLENDFACTOR_ONE, c.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, c.SDL_BLENDOPERATION_ADD, c.SDL_BLENDFACTOR_ONE, c.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, c.SDL_BLENDOPERATION_ADD);
-    try toErr(c.SDL_SetRenderDrawBlendMode(renderer, pma_blend), "SDL_SetRenderDrawBlendMode in initWindow");
+    if (!sdl3 and c.SDL_SetRenderDrawBlendMode(renderer, pma_blend) != 0) {
+        try toErr(c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND), "SDL_SetRenderDrawBlendMode in initWindow");
+    } else {
+        try toErr(c.SDL_SetRenderDrawBlendMode(renderer, pma_blend), "SDL_SetRenderDrawBlendMode in initWindow");
+    }
 
     var back = init(options.io, window, renderer);
     back.ak_should_initialized = show_window_in_begin;
@@ -511,7 +498,7 @@ pub fn setCursor(self: *SDLBackend, cursor: dvui.enums.Cursor) !void {
         if (new_state == false) return;
     }
 
-    const enum_int = @intFromEnum(cursor);
+    const enum_int = @backingInt(cursor);
     const tried = self.cursor_backing_tried[enum_int];
     if (!tried) {
         self.cursor_backing_tried[enum_int] = true;
@@ -637,13 +624,13 @@ pub fn clipboardText(self: *SDLBackend) ![]const u8 {
 
 pub fn clipboardTextSet(self: *SDLBackend, text: []const u8) !void {
     if (text.len == 0) return;
-    const c_text = try self.arena.dupeZ(u8, text);
+    const c_text = try self.arena.dupeSentinel(u8, text, 0);
     defer self.arena.free(c_text);
     try toErr(c.SDL_SetClipboardText(c_text.ptr), "SDL_SetClipboardText in clipboardTextSet");
 }
 
 pub fn openURL(self: *SDLBackend, url: []const u8, _: bool) !void {
-    const c_url = try self.arena.dupeZ(u8, url);
+    const c_url = try self.arena.dupeSentinel(u8, url, 0);
     defer self.arena.free(c_url);
     try toErr(c.SDL_OpenURL(c_url.ptr), "SDL_OpenURL in openURL");
 }
@@ -894,7 +881,11 @@ pub fn textureCreate(self: *SDLBackend, pixels: [*]const u8, width: u32, height:
     }, "SDL_SetTextureScaleMode in textureCreates");
 
     const pma_blend = c.SDL_ComposeCustomBlendMode(c.SDL_BLENDFACTOR_ONE, c.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, c.SDL_BLENDOPERATION_ADD, c.SDL_BLENDFACTOR_ONE, c.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, c.SDL_BLENDOPERATION_ADD);
-    try toErr(c.SDL_SetTextureBlendMode(texture, pma_blend), "SDL_SetTextureBlendMode in textureCreate");
+    if (!sdl3 and c.SDL_SetTextureBlendMode(texture, pma_blend) != 0) {
+        try toErr(c.SDL_SetTextureBlendMode(texture, c.SDL_BLENDMODE_BLEND), "SDL_SetTextureBlendMode in textureCreate");
+    } else {
+        try toErr(c.SDL_SetTextureBlendMode(texture, pma_blend), "SDL_SetTextureBlendMode in textureCreate");
+    }
     return dvui.Texture{ .ptr = texture, .width = width, .height = height, .format = format };
 }
 
@@ -946,10 +937,17 @@ pub fn textureCreateTarget(self: *SDLBackend, width: u32, height: u32, interpola
     }, "SDL_SetTextureScaleMode in textureCreates");
 
     const pma_blend = c.SDL_ComposeCustomBlendMode(c.SDL_BLENDFACTOR_ONE, c.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, c.SDL_BLENDOPERATION_ADD, c.SDL_BLENDFACTOR_ONE, c.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, c.SDL_BLENDOPERATION_ADD);
-    try toErr(
-        c.SDL_SetTextureBlendMode(texture, pma_blend),
-        "SDL_SetTextureBlendMode in textureCreateTarget",
-    );
+    if (!sdl3 and c.SDL_SetTextureBlendMode(texture, pma_blend) != 0) {
+        try toErr(
+            c.SDL_SetTextureBlendMode(texture, c.SDL_BLENDMODE_BLEND),
+            "SDL_SetTextureBlendMode in textureCreateTarget",
+        );
+    } else {
+        try toErr(
+            c.SDL_SetTextureBlendMode(texture, pma_blend),
+            "SDL_SetTextureBlendMode in textureCreateTarget",
+        );
+    }
     //try toErr(c.SDL_SetTextureBlendMode(texture, c.SDL_BLENDMODE_BLEND), "SDL_SetTextureBlendMode in textureCreateTarget",);
 
     const tex = dvui.TextureTarget{ .ptr = texture, .width = width, .height = height, .format = format };
@@ -1325,16 +1323,16 @@ pub fn SDL_keymod_to_dvui(keymod: u16) dvui.enums.Mod {
     if (keymod == if (sdl3) c.SDL_KMOD_NONE else c.KMOD_NONE) return dvui.enums.Mod.none;
 
     var m: u16 = 0;
-    if (keymod & (if (sdl3) c.SDL_KMOD_LSHIFT else c.KMOD_LSHIFT) > 0) m |= @intFromEnum(dvui.enums.Mod.lshift);
-    if (keymod & (if (sdl3) c.SDL_KMOD_RSHIFT else c.KMOD_RSHIFT) > 0) m |= @intFromEnum(dvui.enums.Mod.rshift);
-    if (keymod & (if (sdl3) c.SDL_KMOD_LCTRL else c.KMOD_LCTRL) > 0) m |= @intFromEnum(dvui.enums.Mod.lcontrol);
-    if (keymod & (if (sdl3) c.SDL_KMOD_RCTRL else c.KMOD_RCTRL) > 0) m |= @intFromEnum(dvui.enums.Mod.rcontrol);
-    if (keymod & (if (sdl3) c.SDL_KMOD_LALT else c.KMOD_LALT) > 0) m |= @intFromEnum(dvui.enums.Mod.lalt);
-    if (keymod & (if (sdl3) c.SDL_KMOD_RALT else c.KMOD_RALT) > 0) m |= @intFromEnum(dvui.enums.Mod.ralt);
-    if (keymod & (if (sdl3) c.SDL_KMOD_LGUI else c.KMOD_LGUI) > 0) m |= @intFromEnum(dvui.enums.Mod.lcommand);
-    if (keymod & (if (sdl3) c.SDL_KMOD_RGUI else c.KMOD_RGUI) > 0) m |= @intFromEnum(dvui.enums.Mod.rcommand);
+    if (keymod & (if (sdl3) c.SDL_KMOD_LSHIFT else c.KMOD_LSHIFT) > 0) m |= @backingInt(dvui.enums.Mod.lshift);
+    if (keymod & (if (sdl3) c.SDL_KMOD_RSHIFT else c.KMOD_RSHIFT) > 0) m |= @backingInt(dvui.enums.Mod.rshift);
+    if (keymod & (if (sdl3) c.SDL_KMOD_LCTRL else c.KMOD_LCTRL) > 0) m |= @backingInt(dvui.enums.Mod.lcontrol);
+    if (keymod & (if (sdl3) c.SDL_KMOD_RCTRL else c.KMOD_RCTRL) > 0) m |= @backingInt(dvui.enums.Mod.rcontrol);
+    if (keymod & (if (sdl3) c.SDL_KMOD_LALT else c.KMOD_LALT) > 0) m |= @backingInt(dvui.enums.Mod.lalt);
+    if (keymod & (if (sdl3) c.SDL_KMOD_RALT else c.KMOD_RALT) > 0) m |= @backingInt(dvui.enums.Mod.ralt);
+    if (keymod & (if (sdl3) c.SDL_KMOD_LGUI else c.KMOD_LGUI) > 0) m |= @backingInt(dvui.enums.Mod.lcommand);
+    if (keymod & (if (sdl3) c.SDL_KMOD_RGUI else c.KMOD_RGUI) > 0) m |= @backingInt(dvui.enums.Mod.rcommand);
 
-    return @as(dvui.enums.Mod, @enumFromInt(m));
+    return @as(dvui.enums.Mod, @fromBackingInt(@intCast(m)));
 }
 
 pub fn SDL_keysym_to_dvui(keysym: i32) dvui.enums.Key {
@@ -1464,7 +1462,7 @@ pub fn getSDLVersion() std.SemanticVersion {
             .patch = @mod(v, 1000),
         };
     } else {
-        var v: c.SDL_version = .{};
+        var v: c.SDL_version = undefined;
         c.SDL_GetVersion(&v);
         return .{
             .major = @intCast(v.major),

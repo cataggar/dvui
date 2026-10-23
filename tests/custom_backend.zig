@@ -20,3 +20,29 @@ test "custom backend forwards text into caller-owned storage" {
     entry.textSet("hello", false);
     try std.testing.expectEqualStrings("hello", entry.textGet());
 }
+
+test "backend provisions decode a real raster image" {
+    const image = try dvui.Color.PMAImage.fromImageFile("zig-favicon", std.testing.allocator, dvui.Examples.zig_favicon);
+    defer std.testing.allocator.free(image.pma);
+    try std.testing.expectEqual(@as(u32, 16), image.width);
+    try std.testing.expectEqual(@as(u32, 16), image.height);
+    try std.testing.expectEqual(@as(usize, image.width) * image.height, image.pma.len);
+}
+
+test "disabled TVG conversion reports an explicit error" {
+    if (dvui.useTvg) return error.SkipZigTest;
+    var t = try dvui.testing.init(.{});
+    defer t.deinit();
+    try std.testing.expectError(error.tvgError, dvui.svgToTvg(std.testing.allocator, ""));
+    try std.testing.expectError(error.tvgError, dvui.Color.PMAImage.fromTvgFile(
+        "disabled",
+        std.testing.allocator,
+        std.testing.allocator,
+        "",
+        1,
+        .{},
+    ));
+    const width = try dvui.iconWidth("disabled", "", 24);
+    try std.testing.expect(width > 0);
+    try std.testing.expectEqual(width, try dvui.iconWidth("disabled", "not TinyVG", 24));
+}

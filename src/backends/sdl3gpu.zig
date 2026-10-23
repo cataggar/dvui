@@ -8,13 +8,7 @@ pub const sdl3 = sdl_options.version.major == 3;
 // Index buffer configuration based on build option
 pub const IndexElementSize = if (dvui.Vertex.Index == u32) c.SDL_GPU_INDEXELEMENTSIZE_32BIT else c.SDL_GPU_INDEXELEMENTSIZE_16BIT;
 
-pub const c = @cImport({
-    @cDefine("SDL_DISABLE_OLD_NAMES", {});
-    @cInclude("SDL3/SDL.h");
-
-    @cDefine("SDL_MAIN_HANDLED", {});
-    @cInclude("SDL3/SDL_main.h");
-});
+pub const c = @import("sdl-c");
 
 extern "SDL_config" fn MACOS_enable_scroll_momentum() callconv(.c) void;
 
@@ -384,8 +378,8 @@ initial_scale: f32 = 1.0,
 last_pixel_size: dvui.Size.Physical = .{ .w = 800, .h = 600 },
 last_window_size: dvui.Size.Natural = .{ .w = 800, .h = 600 },
 cursor_last: dvui.enums.Cursor = .arrow,
-cursor_backing: [@typeInfo(dvui.enums.Cursor).@"enum".fields.len]?*c.SDL_Cursor = [_]?*c.SDL_Cursor{null} ** @typeInfo(dvui.enums.Cursor).@"enum".fields.len,
-cursor_backing_tried: [@typeInfo(dvui.enums.Cursor).@"enum".fields.len]bool = [_]bool{false} ** @typeInfo(dvui.enums.Cursor).@"enum".fields.len,
+cursor_backing: [@typeInfo(dvui.enums.Cursor).@"enum".field_names.len]?*c.SDL_Cursor = @splat(null),
+cursor_backing_tried: [@typeInfo(dvui.enums.Cursor).@"enum".field_names.len]bool = @splat(false),
 arena: std.mem.Allocator = undefined,
 textures_arena: std.heap.ArenaAllocator = undefined,
 
@@ -692,16 +686,14 @@ pub fn createPipeline(self: *SDLBackend) !void {
     // Create color target description
     var color_target = std.mem.zeroes(c.SDL_GPUColorTargetDescription);
     color_target.format = swapchain_format;
-    //color_target.blend_state = std.mem.zeroes(c.SDL_GPUColorTargetBlendState);
-    color_target.blend_state = .{
-        .enable_blend = true,
-        .alpha_blend_op = c.SDL_GPU_BLENDOP_ADD,
-        .color_blend_op = c.SDL_GPU_BLENDOP_ADD,
-        .src_color_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE,
-        .src_alpha_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE,
-        .dst_color_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-        .dst_alpha_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-    };
+    color_target.blend_state = std.mem.zeroes(c.SDL_GPUColorTargetBlendState);
+    color_target.blend_state.enable_blend = true;
+    color_target.blend_state.alpha_blend_op = c.SDL_GPU_BLENDOP_ADD;
+    color_target.blend_state.color_blend_op = c.SDL_GPU_BLENDOP_ADD;
+    color_target.blend_state.src_color_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE;
+    color_target.blend_state.src_alpha_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE;
+    color_target.blend_state.dst_color_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_target.blend_state.dst_alpha_blendfactor = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
 
     // Create pipeline info
     var pipeline_info = std.mem.zeroes(c.SDL_GPUGraphicsPipelineCreateInfo);
@@ -745,22 +737,21 @@ pub fn createPipeline(self: *SDLBackend) !void {
 
 pub fn createSamplers(self: *SDLBackend) !void {
     // Create linear sampler
-    const linear_sampler_info = c.SDL_GPUSamplerCreateInfo{
-        .min_filter = c.SDL_GPU_FILTER_LINEAR,
-        .mag_filter = c.SDL_GPU_FILTER_LINEAR,
-        .mipmap_mode = c.SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,
-        .address_mode_u = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .address_mode_v = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .address_mode_w = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .mip_lod_bias = 0.0,
-        .max_anisotropy = 1.0,
-        .compare_op = c.SDL_GPU_COMPAREOP_NEVER,
-        .min_lod = 0.0,
-        .max_lod = 1000.0,
-        .enable_anisotropy = false,
-        .enable_compare = false,
-        .props = 0,
-    };
+    var linear_sampler_info = std.mem.zeroes(c.SDL_GPUSamplerCreateInfo);
+    linear_sampler_info.min_filter = c.SDL_GPU_FILTER_LINEAR;
+    linear_sampler_info.mag_filter = c.SDL_GPU_FILTER_LINEAR;
+    linear_sampler_info.mipmap_mode = c.SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+    linear_sampler_info.address_mode_u = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    linear_sampler_info.address_mode_v = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    linear_sampler_info.address_mode_w = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    linear_sampler_info.mip_lod_bias = 0.0;
+    linear_sampler_info.max_anisotropy = 1.0;
+    linear_sampler_info.compare_op = c.SDL_GPU_COMPAREOP_NEVER;
+    linear_sampler_info.min_lod = 0.0;
+    linear_sampler_info.max_lod = 1000.0;
+    linear_sampler_info.enable_anisotropy = false;
+    linear_sampler_info.enable_compare = false;
+    linear_sampler_info.props = 0;
 
     self.linear_sampler = c.SDL_CreateGPUSampler(self.device, &linear_sampler_info) orelse {
         log.err("Failed to create linear sampler: {s}", .{c.SDL_GetError()});
@@ -768,22 +759,21 @@ pub fn createSamplers(self: *SDLBackend) !void {
     };
 
     // Create nearest sampler
-    const nearest_sampler_info = c.SDL_GPUSamplerCreateInfo{
-        .min_filter = c.SDL_GPU_FILTER_NEAREST,
-        .mag_filter = c.SDL_GPU_FILTER_NEAREST,
-        .mipmap_mode = c.SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,
-        .address_mode_u = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .address_mode_v = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .address_mode_w = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .mip_lod_bias = 0.0,
-        .max_anisotropy = 1.0,
-        .compare_op = c.SDL_GPU_COMPAREOP_NEVER,
-        .min_lod = 0.0,
-        .max_lod = 1000.0,
-        .enable_anisotropy = false,
-        .enable_compare = false,
-        .props = 0,
-    };
+    var nearest_sampler_info = std.mem.zeroes(c.SDL_GPUSamplerCreateInfo);
+    nearest_sampler_info.min_filter = c.SDL_GPU_FILTER_NEAREST;
+    nearest_sampler_info.mag_filter = c.SDL_GPU_FILTER_NEAREST;
+    nearest_sampler_info.mipmap_mode = c.SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    nearest_sampler_info.address_mode_u = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    nearest_sampler_info.address_mode_v = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    nearest_sampler_info.address_mode_w = c.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    nearest_sampler_info.mip_lod_bias = 0.0;
+    nearest_sampler_info.max_anisotropy = 1.0;
+    nearest_sampler_info.compare_op = c.SDL_GPU_COMPAREOP_NEVER;
+    nearest_sampler_info.min_lod = 0.0;
+    nearest_sampler_info.max_lod = 1000.0;
+    nearest_sampler_info.enable_anisotropy = false;
+    nearest_sampler_info.enable_compare = false;
+    nearest_sampler_info.props = 0;
 
     self.nearest_sampler = c.SDL_CreateGPUSampler(self.device, &nearest_sampler_info) orelse {
         log.err("Failed to create nearest sampler: {s}", .{c.SDL_GetError()});
@@ -938,7 +928,7 @@ pub fn setCursor(self: *SDLBackend, cursor: dvui.enums.Cursor) !void {
         if (new_state == false) return;
     }
 
-    const enum_int = @intFromEnum(cursor);
+    const enum_int = @backingInt(cursor);
     const tried = self.cursor_backing_tried[enum_int];
     if (!tried) {
         self.cursor_backing_tried[enum_int] = true;
@@ -1052,13 +1042,13 @@ pub fn clipboardText(self: *SDLBackend) ![]const u8 {
 
 pub fn clipboardTextSet(self: *SDLBackend, text: []const u8) !void {
     if (text.len == 0) return;
-    const c_text = try self.arena.dupeZ(u8, text);
+    const c_text = try self.arena.dupeSentinel(u8, text, 0);
     defer self.arena.free(c_text);
     try toErr(c.SDL_SetClipboardText(c_text.ptr), "SDL_SetClipboardText in clipboardTextSet");
 }
 
 pub fn openURL(self: *SDLBackend, url: []const u8, _: bool) !void {
-    const c_url = try self.arena.dupeZ(u8, url);
+    const c_url = try self.arena.dupeSentinel(u8, url, 0);
     defer self.arena.free(c_url);
     try toErr(c.SDL_OpenURL(c_url.ptr), "SDL_OpenURL in openURL");
 }
@@ -1690,16 +1680,16 @@ pub fn SDL_keymod_to_dvui(keymod: u16) dvui.enums.Mod {
     if (keymod == c.SDL_KMOD_NONE) return dvui.enums.Mod.none;
 
     var m: u16 = 0;
-    if (keymod & (c.SDL_KMOD_LSHIFT) > 0) m |= @intFromEnum(dvui.enums.Mod.lshift);
-    if (keymod & (c.SDL_KMOD_RSHIFT) > 0) m |= @intFromEnum(dvui.enums.Mod.rshift);
-    if (keymod & (c.SDL_KMOD_LCTRL) > 0) m |= @intFromEnum(dvui.enums.Mod.lcontrol);
-    if (keymod & (c.SDL_KMOD_RCTRL) > 0) m |= @intFromEnum(dvui.enums.Mod.rcontrol);
-    if (keymod & (c.SDL_KMOD_LALT) > 0) m |= @intFromEnum(dvui.enums.Mod.lalt);
-    if (keymod & (c.SDL_KMOD_RALT) > 0) m |= @intFromEnum(dvui.enums.Mod.ralt);
-    if (keymod & (c.SDL_KMOD_LGUI) > 0) m |= @intFromEnum(dvui.enums.Mod.lcommand);
-    if (keymod & (c.SDL_KMOD_RGUI) > 0) m |= @intFromEnum(dvui.enums.Mod.rcommand);
+    if (keymod & (c.SDL_KMOD_LSHIFT) > 0) m |= @backingInt(dvui.enums.Mod.lshift);
+    if (keymod & (c.SDL_KMOD_RSHIFT) > 0) m |= @backingInt(dvui.enums.Mod.rshift);
+    if (keymod & (c.SDL_KMOD_LCTRL) > 0) m |= @backingInt(dvui.enums.Mod.lcontrol);
+    if (keymod & (c.SDL_KMOD_RCTRL) > 0) m |= @backingInt(dvui.enums.Mod.rcontrol);
+    if (keymod & (c.SDL_KMOD_LALT) > 0) m |= @backingInt(dvui.enums.Mod.lalt);
+    if (keymod & (c.SDL_KMOD_RALT) > 0) m |= @backingInt(dvui.enums.Mod.ralt);
+    if (keymod & (c.SDL_KMOD_LGUI) > 0) m |= @backingInt(dvui.enums.Mod.lcommand);
+    if (keymod & (c.SDL_KMOD_RGUI) > 0) m |= @backingInt(dvui.enums.Mod.rcommand);
 
-    return @as(dvui.enums.Mod, @enumFromInt(m));
+    return @as(dvui.enums.Mod, @fromBackingInt(@intCast(m)));
 }
 
 pub fn SDL_keysym_to_dvui(keysym: i32) dvui.enums.Key {

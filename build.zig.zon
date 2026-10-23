@@ -26,13 +26,13 @@
             .hash = "translate_c-2.0.0-Q_BUWlpOBwBWvgGBM20tJq-GXgPio3v3UD39rXEn70KN",
         },
         .sdl = .{
-            .url = "git+https://github.com/david-vanderson/SDL#b25735a465f7db1c160d2eca8ac46dde9ec41cfb",
-            .hash = "SDL-2.32.10-JToi37G3EgG0eraPos4vhCwC6vVgyB1FYf1SxxhpBr_Y",
+            .url = "git+https://github.com/cataggar/SDL#1c7b5f4315e6da373a4204844e29531658adb091",
+            .hash = "SDL-2.32.10-JToi30C-EgGhzIidv0QgiSFjHI5tD1lydMZZylwNQhFR",
             .lazy = true,
         },
         .sdl3 = .{
-            .url = "git+https://github.com/david-vanderson/SDL#5bbcf665494fe14acadf50601edf6d5f74ebf96a",
-            .hash = "sdl-0.4.2+3.4.4-SDL--tB1pQFLgwvCakiiOSoZIuVaz6a6-_gOZC66AGRD",
+            .url = "git+https://github.com/cataggar/SDL#3e906927b8ffaca86f063bef94df116907e104b3",
+            .hash = "sdl-0.4.2+3.4.4-SDL--gp2pQFOUqXGe7yqI0VceAl1Ppm90ELTADVfOspL",
             .lazy = true,
         },
         .freetype = .{
@@ -41,8 +41,8 @@
             .lazy = true,
         },
         .raylib = .{
-            .url = "git+https://github.com/raysan5/raylib?ref=master#e9caf5a9811a9c1a126398795915b13ef488618e",
-            .hash = "raylib-6.0.0-whq8uOmvLgUktXC94fZkRLK2dQA75X2pMwZYj2X3EZl8",
+            .url = "git+https://github.com/cataggar/raylib#7e3a08a6b8c375c8168f9ecbac5f9750892031e8",
+            .hash = "raylib-6.0.0-whq8uKrqLgUw87Elg5c1B3uj9JY6S5inPON_ad3I_F1T",
             .lazy = true,
         },
         .wio = .{
@@ -51,8 +51,8 @@
             .lazy = true,
         },
         .opengl = .{
-            .url = "git+https://github.com/ypsvlq/opengl?master#2cd1835dc6e9b31518597cff25ce95fd07f2e0c7",
-            .hash = "opengl-0.0.0-_Vp8-EjsKgDhnkUWeb8Nmr2oEdvsCsDq9bUgmcNi0SuQ",
+            .url = "git+https://github.com/cataggar/opengl#e9c55200fc18042cc1687270458c52e8f1dad85c",
+            .hash = "opengl-0.0.0-_Vp8-CTsKgB8w4bFrpZlD79RxDAuylbgYXP9En-qc7gG",
             .lazy = true,
         },
         //used in the raylib-ontop example
@@ -69,8 +69,8 @@
         },
         // for rendering tvg icons
         .svg2tvg = .{
-            .url = "git+https://github.com/david-vanderson/zig-lib-svg2tvg#ae4e3c656ae00c8a0a931ebee30b3c4f270703dd",
-            .hash = "svg2tvg-0.0.0-HpMZueh3BgDUpNyENQCfcSDeVWeat2x_q-811ZH8GWDZ",
+            .url = "git+https://github.com/cataggar/zig-lib-svg2tvg#a651c4ebf675a3e94209b3e98d478aea51ad5147",
+            .hash = "svg2tvg-0.0.0-HpMZuQZ9BgC9piCqTVGBLAbl7R7FngAyQk2qsKf0kC9j",
             .lazy = true,
         },
         .accesskit = .{
@@ -81,18 +81,18 @@
 
         // Experimental zig bindings, any zig based backend will be located here
         .raylib_zig = .{
-            .url = "git+https://github.com/raylib-zig/raylib-zig?ref=devel#4b6a05cd102d51f00523dd5c5e18e628df359d20",
-            .hash = "raylib_zig-5.6.0-dev-KE8REKNmBQDek2Sz27ULioxYpY9IYR0K0CeIC-iJRLCI",
+            .url = "git+https://github.com/cataggar/raylib-zig#2d84a567f3dccbd136043d1be376767173c1d4ba",
+            .hash = "raylib_zig-5.6.0-dev-KE8REAdoBQD1LiHtYxbk2vihqY9J3rsJTZzRUHpCFY3U",
             .lazy = true,
         },
         .zglfw = .{
-            .url = "git+https://github.com/zig-gamedev/zglfw.git#d9c06187e8b23e91b2ba6865d265e4213e5e7d09",
-            .hash = "zglfw-0.10.0-dev-zgVDNC64IQCeL-_eVOA27Wa50WVitrJswOZVvgcXmIsy",
+            .url = "git+https://github.com/cataggar/zglfw#0349abc29b5accee7cf114f7f8fda7bcd4fb487f",
+            .hash = "zglfw-0.10.0-dev-zgVDNA69IQCJxyQ8Q3NFFcIIdDoZsjJ_xYsAmjxVenbr",
             .lazy = true,
         },
         .tree_sitter = .{
-            .url = "git+https://github.com/david-vanderson/tree-sitter#c8cad6e16017a6bb6eb8a61fb1c1e7f23c552b4f",
-            .hash = "tree_sitter-0.27.0-Tw2sR72eCwCRZKEZND6TJIgdWq9ZnPV9g_syCHLyNEGe",
+            .url = "git+https://github.com/cataggar/tree-sitter#6beb2fc155d472330a492de790e0126cdb86099a",
+            .hash = "tree_sitter-0.27.0-Tw2sR9efCwC6nsKNGtgnagzlVjeHmxjgpvhhVFtHfafH",
             .lazy = true,
         },
         .tree_sitter_json = .{
@@ -101,8 +101,8 @@
             .lazy = true,
         },
         .tree_sitter_zig = .{
-            .url = "git+https://github.com/david-vanderson/tree-sitter-zig.git#f247e4f0017a79c86646089078b68591620d5709",
-            .hash = "tree_sitter_zig-1.1.2-YNf2GAt8XACdbaWHHiNMMfw--bLN1Av1rMsnq6bokMdL",
+            .url = "git+https://github.com/cataggar/tree-sitter-zig#b5dfa05ae35688ad7ae85264e99ad59916406c55",
+            .hash = "tree_sitter_zig-1.1.2-YNf2GP19XACQV2vclJH27kjC-CZLPi8CVrJCiAMsf_zM",
             .lazy = true,
         },
         .zgl = .{

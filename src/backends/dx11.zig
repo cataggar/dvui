@@ -302,7 +302,7 @@ pub fn initWindow(window_state: *WindowState, options: InitOptions) !Context {
             @ptrCast(@constCast(&create_args)),
         ) orelse switch (win32.GetLastError()) {
             win32.ERROR_CANNOT_FIND_WND_CLASS => switch (builtin.mode) {
-                .Debug => std.debug.panic(
+                .debug => std.debug.panic(
                     "did you forget to call RegisterClass? (class_name='{f}')",
                     .{std.unicode.fmtUtf16Le(std.mem.span(options.registered_class))},
                 ),

@@ -2,32 +2,98 @@
 
 [Zig](https://ziglang.org) GUI toolkit for whole applications or debugging windows in existing apps/games.
 
-The custom/testing-backend compatibility branch targets Zig v0.17.0.
-Core C bindings are generated with the exact pinned `cataggar/translate-c`
-2.0.0 and its GitHub Aro mirror. Consumers constructing a DVUI module manually
-must import the dependency module's `dvui-c` bindings as well as its options.
+The compatibility branch targets Zig v0.17.0. Core, SDL, SDL GPU, and C raylib
+bindings are generated with the exact pinned `cataggar/translate-c` 2.0.0 and
+its GitHub Aro mirror. Consumers constructing a DVUI module manually must
+import the selected DVUI module's `dvui-c` bindings as well as its options.
+A single-backend dependency also publishes `dvui-c` for that configuration.
 Optional platform backends and their pinned dependencies need separate native
-acceptance; this port does not refresh those dependencies.
+acceptance.
+
+Shared `render_backend` and `sdl3` exports retain Zig 0.16's last-publication
+behavior. SDL3 GPU retains the public `sdl3` backend name. Each DVUI module
+still imports its own backend and renderer; creating another backend does not
+change those pointers. In a multi-backend graph, obtain bindings from the
+selected DVUI module's `import_table`, not the last-published `dvui-c` alias.
+
+### Compatibility dependency pins
+
+The tree-sitter runtime and Zig grammar retain their existing versions. The
+SVG dependency embeds the pinned XML parser and legacy z2d 0.11 renderer; the
+grammar embeds the same runtime as DVUI. The JSON grammar is unchanged. The
+GLFW, OpenGL, raylib, and raylib-zig package versions are unchanged.
+
+| Dependency | Version | Commit |
+| --- | --- | --- |
+| `cataggar/translate-c` | 2.0.0 | `62d06a5d3e93c82727544e8113e4762a315ca0ed` |
+| `cataggar/SDL` | 2.32.10 | `1c7b5f4315e6da373a4204844e29531658adb091` |
+| `cataggar/SDL` (SDL3 wrapper) | 0.4.2 / 3.4.4 | `3e906927b8ffaca86f063bef94df116907e104b3` |
+| `cataggar/raylib` | 6.0.0 | `7e3a08a6b8c375c8168f9ecbac5f9750892031e8` |
+| `cataggar/raylib-zig` | 5.6.0-dev | `2d84a567f3dccbd136043d1be376767173c1d4ba` |
+| `cataggar/raylib` (via `raylib-zig`) | 5.6.0-dev | `67cd36d787dc6d3b6aa2ee79ec252a3222a756e6` |
+| `cataggar/zemscripten` (via `raylib`) | 0.2.0-dev | `41f772b0fb097b25340103cd6ce3c49c855e9a69` |
+| `cataggar/zemscripten` (via `raylib-zig`) | 0.2.0-dev | `35a81b5323d07d7cca50d6db60295268ae856324` |
+| `cataggar/zglfw` | 0.10.0-dev | `0349abc29b5accee7cf114f7f8fda7bcd4fb487f` |
+| `cataggar/opengl` | 0.0.0 | `e9c55200fc18042cc1687270458c52e8f1dad85c` |
+| `cataggar/tree-sitter` | 0.27.0 | `6beb2fc155d472330a492de790e0126cdb86099a` |
+| `cataggar/tree-sitter-zig` | 1.1.2 | `b5dfa05ae35688ad7ae85264e99ad59916406c55` |
+| `cataggar/zig-lib-svg2tvg` | 0.0.0 | `a651c4ebf675a3e94209b3e98d478aea51ad5147` |
+| `cataggar/zig-xml` (via SVG) | 0.2.0 | `1ef5864dff22a845e486d9819ee16dc1e33596ba` |
+| `cataggar/z2d` (via SVG) | 0.11.0 | `0323bcab652f378f64fc4d31e7cbbdd4a1b926d8` |
+| `tree-sitter/tree-sitter-json` | unchanged | `001c28d7a29832b06b0e831ec77845553c89b56d` |
 
 The focused host consumer target exercises typed data, reflected option
-overrides, generated C bindings, and caller-owned text storage without a
-display or TVG. It previously passed 30 build steps and both consumer tests,
-but the current fetched dependency graph does not configure: the legacy
-SVG/z2d wrapper uses removed `install_prefix`, and default tree-sitter wrappers
-use removed `build_root`. Disabling their features does not make already
-fetched build scripts compatible. This command is the regression target, not
-current source acceptance:
+overrides, generated C bindings, caller-owned text storage, raster decoding,
+and disabled-TVG behavior without a display:
 
 ```sh
 zig build test-custom -j2 -Dbackend=testing -Dtvg=false -Dfreetype=false \
     -Dtiny-file-dialogs=false -Dtree-sitter=false
 ```
 
-The full legacy `test` graph still references TVG-only declarations when TVG
-is disabled. Its optional dependency and platform-backend acceptance are not
-covered by the historical focused check. The source prerequisite remains
-blocked until the exact legacy wrapper graph and required platform checks
-pass; a newer z2d generation is not an automatic compatible replacement.
+Use the default feature set for the complete testing-backend tests and
+examples:
+
+```sh
+zig build install check test test-custom compile-svg2tvg -j2 -Dbackend=testing
+```
+
+`test` includes the backend-publication and real STB custom-libc ABI/allocation
+regressions in a dedicated test root, separate from backend-owned ABI exports;
+`test-build` runs just the publication regression. With `-Dtvg=false`, low-level
+SVG conversion and TVG rasterization log a warning and return `error.tvgError`.
+High-level icons retain their existing text fallback, and declaration checks
+remain enabled.
+
+`-Dstb-image=false` controls compilation of the core STB implementation, not
+the image API. A backend must provide its symbols; the testing backend supplies
+the bundled decoder and writer. With `-Dlibc=false`, the testing and web backends
+use the shared allocator/math callbacks. Custom backends still own their image
+symbols and custom-libc callbacks; no provider is injected into them.
+
+The SDL2 dependency retains its existing version, artifacts, Android Java
+exports, and default features. For a source-built SDL2 Emscripten target, pass
+`-Demscripten-root="$EMSCRIPTEN_ROOT"`; DVUI forwards this `std.Build.LazyPath`
+as the dependency's explicit `emscripten-root` input. It is the Emscripten
+installation directory, not a replacement for the independent global
+`--sysroot` option. The dependency retains its no-follow cache-directory guard.
+
+Source-built SDL3 instead takes `-Dsdk_sysroot="$EMSCRIPTEN_ROOT/cache/sysroot"`
+for Emscripten, or the actual platform SDK sysroot on macOS. DVUI forwards that
+`std.Build.LazyPath` without treating it as the SDL2 installation input or
+global `--sysroot`. Existing `system_include_path`, `system_framework_path`,
+and `library_path` inputs retain their precedence. The wrapper/SDL versions,
+`SDL3`/`SDL3_test` artifacts, and pinned Linux dependency bundle are unchanged.
+
+Generated bindings honor the compiler's `--search-prefix` include directories,
+so headers such as SDL2's native X11 interface see the same search inputs as
+the compiled consumer. Both web examples retain the shared published `web.js`
+asset, registered once for the web backend.
+
+Source-only regression and syntax checks do not qualify the full graph,
+native backends, or examples. Complete normal graphs remain required with
+their pinned dependencies; a newer z2d generation is not an automatic
+compatible replacement.
 
 [Homepage](https://david-vanderson.github.io) · [Demo](https://david-vanderson.github.io/demo) · [Docs](https://david-vanderson.github.io/docs/) · [Devlog](https://david-vanderson.github.io/log/2026)
 
