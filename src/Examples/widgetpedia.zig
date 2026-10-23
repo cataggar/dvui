@@ -276,10 +276,10 @@ pub fn widgetShowSetOptionsTooltip(src: std.builtin.SourceLocation, rect: Rect.P
         defer tl.deinit();
         tl.addText("Configured options:", .{});
         var has_options: bool = false;
-        inline for (std.meta.fields(@TypeOf(opts))) |field| {
-            if (@typeInfo(@FieldType(dvui.Options, field.name)) == .optional and @field(opts, field.name) != null) {
+        inline for (@typeInfo(@TypeOf(opts)).@"struct".field_names) |name| {
+            if (@typeInfo(@FieldType(dvui.Options, name)) == .optional and @field(opts, name) != null) {
                 tl.addText("\n  • ", .{ .color_text = .green });
-                tl.addText(field.name, .{});
+                tl.addText(name, .{});
                 has_options = true;
             }
         }
@@ -296,7 +296,7 @@ pub fn DeclEnumWithSkip(comptime T: type, start_at_decl: usize) type {
     var field_names: [fieldInfos.len][]const u8 = undefined;
     var field_values: [fieldInfos.len]tt = undefined;
     inline for (fieldInfos, 0..) |field, i| {
-        field_names[i] = field.name;
+        field_names[i] = field;
         field_values[i] = @intCast(i);
     }
     return @Enum(tt, .exhaustive, &field_names, &field_values);
@@ -2273,7 +2273,7 @@ const DisplayScrollArea = struct {
         defer hbox_aligned.deinit();
         alignment.record(box.data().id, hbox_aligned.data());
 
-        const selected_index: usize = @intFromEnum(focus_id);
+        const selected_index: usize = @backingInt(focus_id);
 
         var dd: dvui.DropdownWidget = undefined;
         dd.init(@src(), .{ .selected_index = selected_index, .label = if (selected_index == 0) "null" else if (selected_index == 1) "top left" else "bottom right" }, .{});

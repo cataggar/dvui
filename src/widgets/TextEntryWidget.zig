@@ -1381,8 +1381,12 @@ test "text internal" {
     }
     try dvui.testing.settle(Local.frame);
 
-    const full_text_buffer = (text ** (@divFloor(Local.limit, text.len) + 1))[0..Local.limit];
-    try std.testing.expectEqualStrings(full_text_buffer, Local.text);
+    const full_text_buffer = comptime blk: {
+        var buffer: [Local.limit]u8 = undefined;
+        for (&buffer, 0..) |*byte, i| byte.* = text[i % text.len];
+        break :blk buffer;
+    };
+    try std.testing.expectEqualStrings(&full_text_buffer, Local.text);
 }
 
 test "text dynamic buffer" {
@@ -1438,8 +1442,12 @@ test "text dynamic buffer" {
     }
     try dvui.testing.settle(Local.frame);
 
-    const full_text_buffer = (text ** (@divFloor(Local.limit, text.len) + 1))[0..Local.limit];
-    try std.testing.expectEqualStrings(full_text_buffer, Local.text);
+    const full_text_buffer = comptime blk: {
+        var buffer: [Local.limit]u8 = undefined;
+        for (&buffer, 0..) |*byte, i| byte.* = text[i % text.len];
+        break :blk buffer;
+    };
+    try std.testing.expectEqualStrings(&full_text_buffer, Local.text);
 }
 
 test "text buffer" {
@@ -1489,8 +1497,12 @@ test "text buffer" {
     }
     try dvui.testing.settle(Local.frame);
 
-    const full_text_buffer = (text ** (@divFloor(Local.limit, text.len) + 1))[0..Local.limit];
-    try std.testing.expectEqualStrings(full_text_buffer, Local.text);
+    const full_text_buffer = comptime blk: {
+        var buffer: [Local.limit]u8 = undefined;
+        for (&buffer, 0..) |*byte, i| byte.* = text[i % text.len];
+        break :blk buffer;
+    };
+    try std.testing.expectEqualStrings(&full_text_buffer, Local.text);
 }
 
 test "text array_list" {

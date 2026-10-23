@@ -15,20 +15,20 @@ pub fn animations() void {
         var ys: [100]f64 = @splat(0);
     };
     const easing_fns, const easing_names = comptime blk: {
-        const decls = std.meta.declarations(dvui.easing);
-        var easing_names_arr = [_][]const u8{undefined} ** decls.len;
-        var easing_fns_arr = [_]*const dvui.easing.EasingFn{undefined} ** decls.len;
+        const decls = @typeInfo(dvui.easing).@"struct".decl_names;
+        var easing_names_arr: [decls.len][]const u8 = undefined;
+        var easing_fns_arr: [decls.len]*const dvui.easing.EasingFn = undefined;
         var i = 0;
-        for (decls) |decl| {
-            const decl_field = @field(dvui.easing, decl.name);
+        for (decls) |name| {
+            const decl_field = @field(dvui.easing, name);
             if (@TypeOf(decl_field) == dvui.easing.EasingFn) {
-                easing_names_arr[i] = decl.name;
+                easing_names_arr[i] = name;
                 easing_fns_arr[i] = decl_field;
                 i += 1;
             }
         }
-        var out_names = [_][]const u8{undefined} ** i;
-        var out_fns = [_]*const dvui.easing.EasingFn{undefined} ** i;
+        var out_names: [i][]const u8 = undefined;
+        var out_fns: [i]*const dvui.easing.EasingFn = undefined;
         @memcpy(&out_names, easing_names_arr[0..i]);
         @memcpy(&out_fns, easing_fns_arr[0..i]);
         break :blk .{ out_fns, out_names };

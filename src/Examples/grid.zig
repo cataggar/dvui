@@ -277,7 +277,7 @@ pub fn gridLayouts() void {
             if (std.mem.eql(u8, key, "Model")) return std.mem.lessThan(u8, lhs.model, rhs.model);
             if (std.mem.eql(u8, key, "Year")) return lhs.year < rhs.year;
             if (std.mem.eql(u8, key, "Mileage")) return lhs.mileage < rhs.mileage;
-            if (std.mem.eql(u8, key, "Condition")) return @intFromEnum(lhs.condition) < @intFromEnum(rhs.condition);
+            if (std.mem.eql(u8, key, "Condition")) return @backingInt(lhs.condition) < @backingInt(rhs.condition);
             if (std.mem.eql(u8, key, "Description")) return std.mem.lessThan(u8, lhs.description, rhs.description);
             // default sort on Make
             return std.mem.lessThan(u8, lhs.make, rhs.make);
@@ -287,7 +287,7 @@ pub fn gridLayouts() void {
             if (std.mem.eql(u8, key, "Model")) return std.mem.lessThan(u8, rhs.model, lhs.model);
             if (std.mem.eql(u8, key, "Year")) return rhs.year < lhs.year;
             if (std.mem.eql(u8, key, "Mileage")) return rhs.mileage < lhs.mileage;
-            if (std.mem.eql(u8, key, "Condition")) return @intFromEnum(rhs.condition) < @intFromEnum(lhs.condition);
+            if (std.mem.eql(u8, key, "Condition")) return @backingInt(rhs.condition) < @backingInt(lhs.condition);
             if (std.mem.eql(u8, key, "Description")) return std.mem.lessThan(u8, rhs.description, lhs.description);
             // default sort on Make
             return std.mem.lessThan(u8, rhs.make, lhs.make);
@@ -520,7 +520,7 @@ pub fn gridVirtualScrolling() void {
     const num_rows = 1_000_000;
     const local = struct {
         var scroll_info: dvui.ScrollInfo = .{ .vertical = .given, .horizontal = .none };
-        var primes: std.StaticBitSet(num_rows) = .initFull();
+        var primes: std.StaticBitSet(num_rows) = .full;
         var generated_primes: bool = false;
         var highlighted_row: ?usize = null;
         var last_col_width: f32 = 0;
@@ -650,7 +650,7 @@ pub fn gridVariableRowHeights() void {
 
 const DirEntry = struct {
     name: []const u8,
-    kind: enum {file, directory},
+    kind: enum { file, directory },
     size: u65,
     mode: u32,
     mtime: i128,
@@ -690,7 +690,7 @@ pub fn gridSelection() void {
         var filtering_changed = false;
         var select_all_state: dvui.selection.SelectAllState = .select_none;
         var selection_info: dvui.selection.SelectionInfo = .{};
-        var selections: std.StaticBitSet(directory_examples.len) = .initEmpty();
+        var selections: std.StaticBitSet(directory_examples.len) = .empty;
         var highlight_style: CellStyle.HoveredRow = .{ .cell_opts = .{ .color_fill_hover = .gray, .background = true } };
 
         pub fn isFiltered(entry: *const DirEntry) bool {
@@ -703,14 +703,14 @@ pub fn gridSelection() void {
         pub fn selectAll(state: dvui.selection.SelectAllState) void {
             switch (state) {
                 .select_all => {
-                    selections = .initFull();
+                    selections = .full;
                     for (0..selections.capacity()) |i| {
                         if (isFiltered(&directory_examples[i])) {
                             selections.unset(i);
                         }
                     }
                 },
-                .select_none => selections = .initEmpty(),
+                .select_none => selections = .empty,
             }
         }
 

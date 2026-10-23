@@ -19,9 +19,9 @@ shader: raylib.Shader,
 VAO: u32,
 arena: std.mem.Allocator = undefined,
 log_events: bool = false,
-pressed_keys: std.bit_set.ArrayBitSet(u32, 512) = std.bit_set.ArrayBitSet(u32, 512).initEmpty(),
+pressed_keys: std.bit_set.ArrayBitSet(u32, 512) = .empty,
 pressed_modifier: dvui.enums.Mod = .none,
-mouse_button_cache: [RaylibMouseButtons.len]bool = .{false} ** RaylibMouseButtons.len,
+mouse_button_cache: [RaylibMouseButtons.len]bool = @splat(false),
 touch_position_cache: raylib.Vector2 = .{ .x = 0, .y = 0 },
 dvui_consumed_events: bool = false,
 cursor_last: dvui.enums.Cursor = .arrow,
@@ -236,7 +236,7 @@ pub fn drawClippedTriangles(self: *RaylibBackend, texture: ?dvui.Texture, vtx: [
     }
 
     // our shader and textures are alpha premultiplied
-    raylib.gl.rlSetBlendMode(@intFromEnum(raylib.gl.rlBlendMode.rl_blend_alpha_premultiply));
+    raylib.gl.rlSetBlendMode(@backingInt(raylib.gl.rlBlendMode.rl_blend_alpha_premultiply));
 
     const shader = self.shader;
     raylib.gl.rlEnableShader(shader.id);
@@ -251,7 +251,7 @@ pub fn drawClippedTriangles(self: *RaylibBackend, texture: ?dvui.Texture, vtx: [
         mat.m13 *= -1;
     }
     // Some of the shader code will use C def instead to reduce to amount of unnecessary castings
-    raylib.cdef.SetShaderValueMatrix(shader, shader.locs[@intFromEnum(slidx.rl_shader_loc_matrix_mvp)], mat);
+    raylib.cdef.SetShaderValueMatrix(shader, shader.locs[@backingInt(slidx.rl_shader_loc_matrix_mvp)], mat);
 
     _ = raylib.gl.rlEnableVertexArray(self.VAO);
 
@@ -261,16 +261,16 @@ pub fn drawClippedTriangles(self: *RaylibBackend, texture: ?dvui.Texture, vtx: [
     raylib.gl.rlEnableVertexBufferElement(EBO);
 
     const pos = @offsetOf(dvui.Vertex, "pos");
-    raylib.gl.rlSetVertexAttribute(@intCast(shader.locs[@intFromEnum(slidx.rl_shader_loc_vertex_position)]), 2, raylib.gl.rl_float, false, @sizeOf(dvui.Vertex), pos);
-    raylib.gl.rlEnableVertexAttribute(@intCast(shader.locs[@intFromEnum(slidx.rl_shader_loc_vertex_position)]));
+    raylib.gl.rlSetVertexAttribute(@intCast(shader.locs[@backingInt(slidx.rl_shader_loc_vertex_position)]), 2, raylib.gl.rl_float, false, @sizeOf(dvui.Vertex), pos);
+    raylib.gl.rlEnableVertexAttribute(@intCast(shader.locs[@backingInt(slidx.rl_shader_loc_vertex_position)]));
 
     const col = @offsetOf(dvui.Vertex, "col");
-    raylib.gl.rlSetVertexAttribute(@intCast(shader.locs[@intFromEnum(slidx.rl_shader_loc_vertex_color)]), 4, raylib.gl.rl_unsigned_byte, false, @sizeOf(dvui.Vertex), col);
-    raylib.gl.rlEnableVertexAttribute(@intCast(shader.locs[@intFromEnum(slidx.rl_shader_loc_vertex_color)]));
+    raylib.gl.rlSetVertexAttribute(@intCast(shader.locs[@backingInt(slidx.rl_shader_loc_vertex_color)]), 4, raylib.gl.rl_unsigned_byte, false, @sizeOf(dvui.Vertex), col);
+    raylib.gl.rlEnableVertexAttribute(@intCast(shader.locs[@backingInt(slidx.rl_shader_loc_vertex_color)]));
 
     const uv = @offsetOf(dvui.Vertex, "uv");
-    raylib.gl.rlSetVertexAttribute(@intCast(shader.locs[@intFromEnum(slidx.rl_shader_loc_vertex_texcoord01)]), 2, raylib.gl.rl_float, false, @sizeOf(dvui.Vertex), uv);
-    raylib.gl.rlEnableVertexAttribute(@intCast(shader.locs[@intFromEnum(slidx.rl_shader_loc_vertex_texcoord01)]));
+    raylib.gl.rlSetVertexAttribute(@intCast(shader.locs[@backingInt(slidx.rl_shader_loc_vertex_texcoord01)]), 2, raylib.gl.rl_float, false, @sizeOf(dvui.Vertex), uv);
+    raylib.gl.rlEnableVertexAttribute(@intCast(shader.locs[@backingInt(slidx.rl_shader_loc_vertex_texcoord01)]));
 
     const usetex_loc = raylib.getShaderLocation(shader, "useTex");
 
@@ -282,13 +282,13 @@ pub fn drawClippedTriangles(self: *RaylibBackend, texture: ?dvui.Texture, vtx: [
 
         const tex_loc = raylib.getShaderLocation(shader, "texture0");
         const tex_val: c_int = 0;
-        raylib.gl.rlSetUniform(tex_loc, &tex_val, @intFromEnum(suni.rl_shader_uniform_sampler2d), 1);
+        raylib.gl.rlSetUniform(tex_loc, &tex_val, @backingInt(suni.rl_shader_uniform_sampler2d), 1);
 
         const usetex_val: c_int = 1;
-        raylib.gl.rlSetUniform(usetex_loc, &usetex_val, @intFromEnum(suni.rl_shader_uniform_int), 1);
+        raylib.gl.rlSetUniform(usetex_loc, &usetex_val, @backingInt(suni.rl_shader_uniform_int), 1);
     } else {
         const usetex_val: c_int = 0;
-        raylib.gl.rlSetUniform(usetex_loc, &usetex_val, @intFromEnum(suni.rl_shader_uniform_int), 1);
+        raylib.gl.rlSetUniform(usetex_loc, &usetex_val, @backingInt(suni.rl_shader_uniform_int), 1);
     }
 
     raylib.gl.rlDrawVertexArrayElements(0, @intCast(idx.len), null);
@@ -299,7 +299,7 @@ pub fn drawClippedTriangles(self: *RaylibBackend, texture: ?dvui.Texture, vtx: [
     raylib.gl.rlUnloadVertexBuffer(EBO);
 
     // reset blend mode back to default so raylib text rendering works
-    raylib.gl.rlSetBlendMode(@intFromEnum(raylib.gl.rlBlendMode.rl_blend_alpha));
+    raylib.gl.rlSetBlendMode(@backingInt(raylib.gl.rlBlendMode.rl_blend_alpha));
 
     if (clipr_in) |_| {
         raylib.endScissorMode();
@@ -312,7 +312,7 @@ pub fn textureCreate(_: *RaylibBackend, pixels: [*]const u8, width: u32, height:
         return dvui.Backend.TextureError.TextureCreate;
     }
 
-    const texid = raylib.gl.rlLoadTexture(pixels, @intCast(width), @intCast(height), @intFromEnum(raylib.PixelFormat.uncompressed_r8g8b8a8), 1);
+    const texid = raylib.gl.rlLoadTexture(pixels, @intCast(width), @intCast(height), @backingInt(raylib.PixelFormat.uncompressed_r8g8b8a8), 1);
     if (texid <= 0) return dvui.Backend.TextureError.TextureCreate;
 
     switch (interpolation) {
@@ -348,7 +348,7 @@ pub fn textureCreateTarget(self: *RaylibBackend, width: u32, height: u32, interp
     defer raylib.gl.rlDisableFramebuffer();
 
     // Create color texture (default to RGBA)
-    const texid = raylib.gl.rlLoadTexture(null, @intCast(width), @intCast(height), @intFromEnum(raylib.PixelFormat.uncompressed_r8g8b8a8), 1);
+    const texid = raylib.gl.rlLoadTexture(null, @intCast(width), @intCast(height), @backingInt(raylib.PixelFormat.uncompressed_r8g8b8a8), 1);
     if (texid <= 0) return dvui.Backend.TextureError.TextureCreate;
     switch (interpolation) {
         .nearest => {
@@ -364,7 +364,7 @@ pub fn textureCreateTarget(self: *RaylibBackend, width: u32, height: u32, interp
     raylib.gl.rlTextureParameters(texid, raylib.gl.rl_texture_wrap_s, raylib.gl.rl_texture_wrap_clamp);
     raylib.gl.rlTextureParameters(texid, raylib.gl.rl_texture_wrap_t, raylib.gl.rl_texture_wrap_clamp);
 
-    raylib.gl.rlFramebufferAttach(id, texid, @intFromEnum(raylib.gl.rlFramebufferAttachType.rl_attachment_color_channel0), @intFromEnum(raylib.gl.rlFramebufferAttachTextureType.rl_attachment_texture2d), 0);
+    raylib.gl.rlFramebufferAttach(id, texid, @backingInt(raylib.gl.rlFramebufferAttachType.rl_attachment_color_channel0), @backingInt(raylib.gl.rlFramebufferAttachTextureType.rl_attachment_texture2d), 0);
 
     if (!raylib.gl.rlFramebufferComplete(id)) {
         log.debug("textureCreateTarget: rlFramebufferComplete() false\n", .{});
@@ -474,13 +474,13 @@ pub fn clipboardText(_: *RaylibBackend) ![]const u8 {
 }
 
 pub fn clipboardTextSet(self: *RaylibBackend, text: []const u8) !void {
-    const c_text = try self.arena.dupeZ(u8, text);
+    const c_text = try self.arena.dupeSentinel(u8, text, 0);
     defer self.arena.free(c_text);
     raylib.setClipboardText(c_text);
 }
 
 pub fn openURL(self: *RaylibBackend, url: []const u8, _: bool) !void {
-    const c_url = try self.arena.dupeZ(u8, url);
+    const c_url = try self.arena.dupeSentinel(u8, url, 0);
     defer self.arena.free(c_url);
     raylib.openURL(c_url);
 }
@@ -556,7 +556,7 @@ pub fn addAllEvents(self: *RaylibBackend, win: *dvui.Window) !void {
     //check for key releases
     var iter = self.pressed_keys.iterator(.{});
     while (iter.next()) |keycode| {
-        const keyenum: raylib.KeyboardKey = @enumFromInt(keycode);
+        const keyenum: raylib.KeyboardKey = @fromBackingInt(@intCast(keycode));
         if (raylib.isKeyUp(keyenum)) {
             self.pressed_keys.unset(keycode);
 
@@ -583,7 +583,7 @@ pub fn addAllEvents(self: *RaylibBackend, win: *dvui.Window) !void {
     //get key presses
     while (true) {
         const event_enum = raylib.getKeyPressed();
-        const event = @intFromEnum(event_enum);
+        const event = @backingInt(event_enum);
         if (event == 0) break;
 
         //update list of set keys
@@ -625,7 +625,7 @@ pub fn addAllEvents(self: *RaylibBackend, win: *dvui.Window) !void {
     //account for key repeat
     iter = self.pressed_keys.iterator(.{});
     while (iter.next()) |keycode| {
-        if (raylib.isKeyPressed(@enumFromInt(keycode)) and
+        if (raylib.isKeyPressed(@fromBackingInt(@intCast(keycode))) and
             (self.pressed_modifier.shiftOnly() or self.pressed_modifier.has(.none)) and
             keycode < std.math.maxInt(u8) and std.ascii.isPrint(@intCast(keycode)))
         {
@@ -959,7 +959,7 @@ fn raylibLogCallback(
         @branchHint(.likely);
         break :blk .{ buf[0..@intCast(len) :0], "" };
     };
-    const msgTypeEnum: raylib.TraceLogLevel = @enumFromInt(msgType);
+    const msgTypeEnum: raylib.TraceLogLevel = @fromBackingInt(@intCast(msgType));
     switch (msgTypeEnum) {
         .trace, .debug => logger.debug("{s}{s}", .{ msg, postfix }),
         .info => logger.info("{s}{s}", .{ msg, postfix }),

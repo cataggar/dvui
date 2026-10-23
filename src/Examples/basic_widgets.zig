@@ -17,7 +17,7 @@ const RadioChoice = enum(u8) {
     two,
     _,
 };
-var radio_choice: RadioChoice = @enumFromInt(0);
+var radio_choice: RadioChoice = @fromBackingInt(@intCast(0));
 var dropdown_val: ?usize = null;
 
 /// ![image](Examples-basic_widgets.png)
@@ -113,9 +113,9 @@ pub fn basicWidgets() void {
         var group = dvui.radioGroup(@src(), .{}, .{ .label = .{ .text = "Radio buttons" } });
         defer group.deinit();
 
-        inline for (@typeInfo(RadioChoice).@"enum".fields, 0..) |field, i| {
-            if (dvui.radio(@src(), radio_choice == @as(RadioChoice, @enumFromInt(field.value)), "Radio " ++ field.name, .{ .id_extra = i })) {
-                radio_choice = @enumFromInt(field.value);
+        inline for (@typeInfo(RadioChoice).@"enum".field_names, @typeInfo(RadioChoice).@"enum".field_values, 0..) |name, value, i| {
+            if (dvui.radio(@src(), radio_choice == @as(RadioChoice, @fromBackingInt(@intCast(value))), "Radio " ++ name, .{ .id_extra = i })) {
+                radio_choice = @fromBackingInt(@intCast(value));
             }
         }
     }

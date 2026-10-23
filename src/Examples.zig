@@ -159,8 +159,8 @@ pub fn demo(comptime include: DemoInclude) void {
         var fbox = dvui.flexbox(@src(), .{}, .{ .expand = .both, .min_size_content = .width(width), .corner_radius = .{ .w = 5, .h = 5 } });
         defer fbox.deinit();
 
-        inline for (0..@typeInfo(demoKind).@"enum".fields.len) |i| {
-            const e = @as(demoKind, @enumFromInt(i));
+        inline for (0..@typeInfo(demoKind).@"enum".field_names.len) |i| {
+            const e = @as(demoKind, @fromBackingInt(@intCast(i)));
             if (include != .full) {
                 if (e == .struct_ui) continue;
             }
@@ -439,7 +439,7 @@ pub fn grids() void {
         row_heights,
         selection,
         navigation,
-        const num_grids = @typeInfo(@This()).@"enum".fields.len;
+        const num_grids = @typeInfo(@This()).@"enum".field_names.len;
     };
 
     const local = struct {
@@ -467,7 +467,7 @@ pub fn grids() void {
         var tabs = dvui.tabs(@src(), .{ .dir = .horizontal }, .{ .expand = .horizontal });
         defer tabs.deinit();
         for (0..GridType.num_grids) |tab_num| {
-            const this_tab: GridType = @enumFromInt(tab_num);
+            const this_tab: GridType = @fromBackingInt(@intCast(tab_num));
 
             if (tabs.addTabLabel(local.tabSelected(this_tab), local.tabName(this_tab), .{})) {
                 local.active_grid = this_tab;

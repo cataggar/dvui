@@ -1,6 +1,6 @@
 /// ![image](Examples-iconBrowser.png)
 pub fn iconBrowser(src: std.builtin.SourceLocation, show_flag: *bool, comptime icon_decl_name: []const u8, comptime icon_decl: type) void {
-    const num_icons = @typeInfo(icon_decl).@"struct".decls.len;
+    const num_icons = @typeInfo(icon_decl).@"struct".decl_names.len;
     const Settings = struct {
         icon_size: f32 = 20,
         icon_rgb: dvui.Color = .black,
@@ -11,16 +11,16 @@ pub fn iconBrowser(src: std.builtin.SourceLocation, show_flag: *bool, comptime i
 
     const icon_names: [num_icons][]const u8 = blk: {
         var blah: [num_icons][]const u8 = undefined;
-        inline for (@typeInfo(icon_decl).@"struct".decls, 0..) |d, i| {
-            blah[i] = d.name;
+        inline for (@typeInfo(icon_decl).@"struct".decl_names, 0..) |name, i| {
+            blah[i] = name;
         }
         break :blk blah;
     };
 
     const icon_fields: [num_icons][]const u8 = blk: {
         var blah: [num_icons][]const u8 = undefined;
-        inline for (@typeInfo(icon_decl).@"struct".decls, 0..) |d, i| {
-            blah[i] = @field(icon_decl, d.name);
+        inline for (@typeInfo(icon_decl).@"struct".decl_names, 0..) |name, i| {
+            blah[i] = @field(icon_decl, name);
         }
         break :blk blah;
     };
@@ -59,7 +59,7 @@ pub fn iconBrowser(src: std.builtin.SourceLocation, show_flag: *bool, comptime i
     settings.num_rows = 0;
 
     for (icon_names, icon_fields, 0..) |name, field, i| {
-        if (std.ascii.indexOfIgnoreCase(name, filter) == null) {
+        if (std.ascii.findIgnoreCase(name, filter) == null) {
             continue;
         }
         settings.num_rows += 1;

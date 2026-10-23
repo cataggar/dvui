@@ -32,6 +32,68 @@ const CommonSdl = struct {
     options: *std.Build.Step.Options,
 };
 
+fn publishCompatibilityModule(b: *std.Build, name: []const u8, module: *std.Build.Module) void {
+    // Zig 0.16 published the last module under shared backend names.
+    b.modules.put(b.graph.arena, b.graph.dupeString(name), module) catch @panic("OOM");
+}
+
+fn translateBindings(
+    module: *std.Build.Module,
+    name: []const u8,
+    header: []const u8,
+    opts: DvuiModuleOptions,
+    libc: bool,
+) *std.Build.Module {
+    const b = opts.b;
+    const Translator = @import("translate_c").Translator;
+    var system_libs: std.ArrayList(Translator.LinkSystemLib) = .empty;
+    for (module.link_objects.items) |object| {
+        if (object == .system_lib) {
+            const lib = object.system_lib;
+            system_libs.append(b.graph.arena, .{ .name = lib.name, .options = .{
+                .needed = lib.needed,
+                .weak = lib.weak,
+                .use_pkg_config = lib.use_pkg_config,
+                .preferred_link_mode = lib.preferred_link_mode,
+                .search_strategy = lib.search_strategy,
+            } }) catch @panic("OOM");
+        }
+    }
+    const bindings: Translator = .init(b.dependency("translate_c", .{}), .{
+        .name = name,
+        .c_source_file = b.addWriteFiles().add(b.fmt("{s}.h", .{name}), header),
+        .target = opts.target,
+        .optimize = opts.optimize,
+        .link_libc = libc and !opts.target.result.abi.isAndroid(),
+        .link_system_libs = system_libs.items,
+    });
+    for (b.graph.search_prefixes.items) |prefix| {
+        bindings.addIncludePath(b.graph.cwdRelativePath(b.pathJoin(&.{ prefix, "include" })));
+    }
+    for (module.include_dirs.items) |include| {
+        switch (include) {
+            .path => |path| bindings.addIncludePath(path),
+            .path_system => |path| bindings.addSystemIncludePath(path),
+            .path_after => |path| bindings.addAfterIncludePath(path),
+            .framework_path => |path| bindings.addFrameworkPath(path),
+            .framework_path_system => |path| bindings.addSystemFrameworkPath(path),
+            .other_step => |lib| bindings.addIncludePath(lib.getEmittedIncludeTree()),
+            .config_header_step => |config| bindings.addConfigHeader(config),
+            .embed_path => |path| bindings.addEmbedPath(path),
+        }
+    }
+    bindings.run.addArgs(module.c_macros.items);
+    return bindings.mod;
+}
+
+const sdl3_header =
+    \\#define SDL_DISABLE_OLD_NAMES
+    \\#include <SDL3/SDL.h>
+    \\#define SDL_MAIN_HANDLED
+    \\#include <SDL3/SDL_main.h>
+    \\
+;
+
 fn addAndroidLibC(
     mod: *std.Build.Module,
     opts: DvuiModuleOptions,
@@ -43,7 +105,7 @@ fn addAndroidLibC(
             .x86_64 => "x86_64-linux-android",
             .arm => "arm-linux-androideabi",
             .aarch64 => "aarch64-linux-android",
-            else => @panic("Unkown Android arch")
+            else => @panic("Unkown Android arch"),
         };
 
         mod.addSystemIncludePath(include_path.path(opts.b, arch_specific_path));
@@ -71,6 +133,7 @@ pub fn linkSdl3(
             .system_include_path = opts.sdl3_system_include_path,
             .system_framework_path = opts.sdl3_system_framework_path,
             .library_path = opts.sdl3_library_path,
+            .sdk_sysroot = opts.sdl3_sdk_sysroot,
         })) |sdl3| {
             if (opts.target.result.abi.isAndroid()) {
                 sdl_mod.addIncludePath(sdl3.path("include"));
@@ -93,6 +156,23 @@ pub fn build(b: *std.Build) !void {
 
     const test_step = b.step("test", "Test the dvui codebase");
     const check_step = b.step("check", "Check that the entire dvui codebase has no syntax errors");
+    const build_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("build.zig"),
+        .target = b.graph.host,
+    }) });
+    const run_build_tests = b.addRunArtifact(build_tests);
+    test_step.dependOn(&run_build_tests.step);
+    b.step("test-build", "Test backend module publication").dependOn(&run_build_tests.step);
+    const stb_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/backends/stb_libc_tests.zig"),
+        .target = b.graph.host,
+        .optimize = optimize,
+    }) });
+    stb_tests.root_module.addCSourceFiles(.{
+        .files = &.{ "vendor/stb/stb_image_impl.c", "vendor/stb/stb_image_write_impl.c", "vendor/stb/stb_truetype_impl.c" },
+        .flags = &.{ "-DINCLUDE_CUSTOM_LIBC_FUNCS=1", "-DSTBI_NO_STDLIB=1", "-DSTBIW_NO_STDLIB=1", "-DSTBI_NO_SIMD=1" },
+    });
+    test_step.dependOn(&b.addRunArtifact(stb_tests).step);
 
     const use_llvm = b.option(bool, "use-llvm", "The value of the use_llvm executable option");
     // Setting this to false may fix linking errors: https://github.com/david-vanderson/dvui/issues/269
@@ -134,14 +214,18 @@ pub fn build(b: *std.Build) !void {
         "snapshot_image_suffix",
         b.option([]const u8, "snapshot-images", "When this name is defined, dvui.testing.snapshot will save an image ending with the string provided"),
     );
-    build_options.addOption(
-        ?[]const u8,
-        "image_dir",
-        if (generate_doc_images)
-            b.getInstallPath(.prefix, "docs")
-        else
+    if (generate_doc_images) {
+        build_options.addOptionPathUntracked("image_dir", .{ .relative = .{
+            .base = .install_prefix,
+            .sub_path = "docs",
+        } });
+    } else {
+        build_options.addOption(
+            ?[]const u8,
+            "image_dir",
             b.option([]const u8, "image-dir", "Default directory for dvui.testing.saveImage"),
-    );
+        );
+    }
     build_options.addOption(
         ?u8,
         "log_stack_trace",
@@ -161,6 +245,8 @@ pub fn build(b: *std.Build) !void {
     const system_include_path = b.option(std.Build.LazyPath, "system_include_path", "system include path");
     const system_framework_path = b.option(std.Build.LazyPath, "system_framework_path", "system framework path");
     const library_path = b.option(std.Build.LazyPath, "library_path", "system library path");
+    const emscripten_root = b.option(std.Build.LazyPath, "emscripten-root", "Emscripten installation root for SDL2 (independent of --sysroot)");
+    const sdk_sysroot = b.option(std.Build.LazyPath, "sdk_sysroot", "SDK sysroot for source-built SDL3 (independent of --sysroot)");
 
     const vertex_index = b.option(VertexIndex, "vertex-index", "Vertex index type (default u16)") orelse .u16;
     build_options.addOption(
@@ -201,7 +287,9 @@ pub fn build(b: *std.Build) !void {
         .sdl3_system_include_path = system_include_path,
         .sdl3_system_framework_path = system_framework_path,
         .sdl3_library_path = library_path,
+        .sdl3_sdk_sysroot = sdk_sysroot,
         .android_include_path = android_include_path,
+        .emscripten_root = emscripten_root,
     };
 
     if (back_to_build) |backend| {
@@ -348,12 +436,30 @@ pub fn buildBackend(backend: Backend, test_dvui_and_app: bool, dvui_opts_in: Dvu
             dvui_opts.addTests(testing_mod, "testing-backend");
 
             const dvui_testing = addDvuiModule("dvui_testing", dvui_opts);
+            if (!dvui_opts.stb_image.?) {
+                testing_mod.addCSourceFiles(.{
+                    .files = &.{ "vendor/stb/stb_image_impl.c", "vendor/stb/stb_image_write_impl.c" },
+                    .flags = if (dvui_opts.libc.?) &.{} else &.{
+                        "-DINCLUDE_CUSTOM_LIBC_FUNCS=1", "-DSTBI_NO_STDLIB=1", "-DSTBIW_NO_STDLIB=1", "-DSTBI_NO_SIMD=1",
+                    },
+                });
+            }
             dvui_opts.addChecks(dvui_testing, "dvui_testing");
             if (test_dvui_and_app) {
                 dvui_opts.addTests(dvui_testing, "dvui_testing");
             }
 
             linkBackend(dvui_testing, testing_mod);
+            const consumer_tests = b.addTest(.{
+                .name = "custom-backend-consumer",
+                .root_module = b.createModule(.{
+                    .root_source_file = b.path("tests/custom_backend.zig"),
+                    .target = target,
+                    .optimize = optimize,
+                    .imports = &.{.{ .name = "dvui", .module = dvui_testing }},
+                }),
+            });
+            b.step("test-custom", "Test custom-backend consumer and reflection").dependOn(&b.addRunArtifact(consumer_tests).step);
             const example_opts: ExampleOptions = .{
                 .dvui_mod = dvui_testing,
                 .backend_name = "testing-backend",
@@ -395,13 +501,23 @@ pub fn buildBackend(backend: Backend, test_dvui_and_app: bool, dvui_opts_in: Dvu
                         sdl_mod.linkLibrary(sd.artifact("SDL2"));
                     }
                 } else {
-                    const sdl_dep = b.lazyDependency("sdl", .{ .target = target, .optimize = optimize });
+                    const sdl_dep = b.lazyDependency("sdl", .{
+                        .target = target,
+                        .optimize = optimize,
+                        .@"emscripten-root" = dvui_opts.emscripten_root,
+                    });
                     if (sdl_dep) |sd| {
                         sdl_mod.linkLibrary(sd.artifact("SDL2"));
                     }
                 }
             }
             sdl_mod.addOptions("sdl_options", sdl2_options);
+            sdl_mod.addImport("sdl-c", translateBindings(sdl_mod, "sdl2-c",
+                \\#define SDL_DISABLE_ARM_NEON_H 1
+                \\#include <SDL2/SDL_syswm.h>
+                \\#include <SDL2/SDL.h>
+                \\
+            , dvui_opts, true));
 
             // Enable smooth scrolling on mac
             if (target.result.os.tag == .macos) {
@@ -448,12 +564,13 @@ pub fn buildBackend(backend: Backend, test_dvui_and_app: bool, dvui_opts_in: Dvu
         },
         .sdl3gpu => {
             dvui_opts.setDefaults(.{ .libc = true, .freetype = true, .tiny_file_dialogs = true, .stb_image = true, .tree_sitter = true });
-            const sdl_mod = b.addModule("sdl3", .{
+            const sdl_mod = b.createModule(.{
                 .root_source_file = b.path("src/backends/sdl3gpu.zig"),
                 .target = target,
                 .optimize = optimize,
                 .link_libc = true,
             });
+            publishCompatibilityModule(b, "sdl3", sdl_mod);
             dvui_opts.addChecks(sdl_mod, "sdl3gpu-backend");
             dvui_opts.addTests(sdl_mod, "sdl3gpu-backend");
 
@@ -464,6 +581,7 @@ pub fn buildBackend(backend: Backend, test_dvui_and_app: bool, dvui_opts_in: Dvu
             //     b.option(bool, "sdl3gpu-callbacks", "Use callbacks for live resizing on windows/mac"),
             // );
             linkSdl3(sdl_mod, sdl3_options, dvui_opts_in);
+            sdl_mod.addImport("sdl-c", translateBindings(sdl_mod, "sdl3gpu-c", sdl3_header, dvui_opts, true));
 
             const dvui_sdl = addDvuiModule("dvui_sdl3gpu", dvui_opts);
             // dvui_opts.addChecks(dvui_sdl, "dvui_sdl3gpu");
@@ -486,12 +604,13 @@ pub fn buildBackend(backend: Backend, test_dvui_and_app: bool, dvui_opts_in: Dvu
             } else {
                 dvui_opts.setDefaults(.{ .libc = true, .freetype = true, .tiny_file_dialogs = true, .stb_image = true, .tree_sitter = true });
             }
-            const sdl_mod = b.addModule("sdl3", .{
+            const sdl_mod = b.createModule(.{
                 .root_source_file = b.path("src/backends/sdl.zig"),
                 .target = target,
                 .optimize = optimize,
                 .link_libc = true,
             });
+            publishCompatibilityModule(b, "sdl3", sdl_mod);
 
             if (!target.result.abi.isAndroid()) {
                 dvui_opts.addChecks(sdl_mod, "sdl3-backend");
@@ -505,6 +624,7 @@ pub fn buildBackend(backend: Backend, test_dvui_and_app: bool, dvui_opts_in: Dvu
             );
 
             linkSdl3(sdl_mod, sdl3_options, dvui_opts_in);
+            sdl_mod.addImport("sdl-c", translateBindings(sdl_mod, "sdl3-c", sdl3_header, dvui_opts, true));
 
             const dvui_sdl = addDvuiModule("dvui_sdl3", dvui_opts);
             if (!target.result.abi.isAndroid()) {
@@ -579,6 +699,14 @@ pub fn buildBackend(backend: Backend, test_dvui_and_app: bool, dvui_opts_in: Dvu
                 }
             }
 
+            raylib_backend_mod.addImport("raylib-c", translateBindings(raylib_backend_mod, "raylib-c",
+                \\#include <raylib.h>
+                \\#include <raymath.h>
+                \\#include <rlgl.h>
+                \\#include <raygui.h>
+                \\#include <glfw3.h>
+                \\
+            , dvui_opts, true));
             const dvui_raylib = addDvuiModule("dvui_raylib", dvui_opts);
             dvui_opts.addChecks(dvui_raylib, "dvui_raylib");
             if (test_dvui_and_app) {
@@ -784,6 +912,7 @@ pub fn buildBackend(backend: Backend, test_dvui_and_app: bool, dvui_opts_in: Dvu
             }
 
             linkBackend(dvui_web, web_mod);
+            b.addNamedLazyPath("web.js", b.path("src/backends/web.js"));
 
             // Examples, must be compiled for wasm32
             {
@@ -880,7 +1009,7 @@ pub fn linkBackend(dvui_mod: *std.Build.Module, backend_mod: *std.Build.Module) 
 const DvuiModuleOptions = struct {
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
     check_step: ?*std.Build.Step = null,
     test_step: ?*std.Build.Step = null,
     test_filters: []const []const u8,
@@ -901,7 +1030,9 @@ const DvuiModuleOptions = struct {
     sdl3_system_include_path: ?std.Build.LazyPath = null,
     sdl3_system_framework_path: ?std.Build.LazyPath = null,
     sdl3_library_path: ?std.Build.LazyPath = null,
+    sdl3_sdk_sysroot: ?std.Build.LazyPath = null,
     android_include_path: ?std.Build.LazyPath = null,
+    emscripten_root: ?std.Build.LazyPath = null,
 
     pub const DefaultOptions = struct {
         libc: bool,
@@ -1036,10 +1167,11 @@ pub fn addDvuiModule(
         }
     }
 
-    const renderer_mod = b.addModule("render_backend", .{
+    const renderer_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
     });
+    publishCompatibilityModule(b, "render_backend", renderer_mod);
     switch (opts.render_backend) {
         .default => renderer_mod.root_source_file = b.path("src/backends/render/default.zig"),
         .opengl => {
@@ -1067,6 +1199,18 @@ pub fn addDvuiModule(
                 dvui_mod.addLibraryPath(accessKitPath(b, target, ak_dep, opts.accesskit, false));
             }
             dvui_mod.linkSystemLibrary("accesskit", .{});
+            const accesskit_c: @import("translate_c").Translator = .init(b.dependency("translate_c", .{}), .{
+                .name = "accesskit-c",
+                .c_source_file = b.addWriteFiles().add("accesskit-c.h",
+                    \\#define __mingw_current_teb ___mingw_current_teb
+                    \\#include <accesskit.h>
+                    \\
+                ),
+                .target = target,
+                .optimize = optimize,
+            });
+            accesskit_c.addIncludePath(ak_dep.path("include"));
+            dvui_mod.addImport("accesskit-c", accesskit_c.mod);
 
             if (target.result.os.tag == .linux) {
                 dvui_mod.linkSystemLibrary("unwind", .{});
@@ -1159,7 +1303,48 @@ pub fn addDvuiModule(
         }
     }
 
+    const bindings = translateBindings(dvui_mod, "dvui-c", b.fmt(
+        \\#define _SETJMP_H 1
+        \\{s}
+        \\{s}
+        \\#include <stb_image.h>
+        \\#include <stb_image_write.h>
+        \\{s}
+        \\{s}
+        \\
+    , .{
+        if (freetype)
+            "#include <freetype/ftadvanc.h>\n#include <freetype/ftbbox.h>\n#include <freetype/ftbitmap.h>\n#include <freetype/ftcolor.h>\n#include <freetype/ftlcdfil.h>\n#include <freetype/ftsizes.h>\n#include <freetype/ftstroke.h>\n#include <freetype/fttrigon.h>"
+        else
+            "#include <stb_truetype.h>",
+        if (libc) "" else "#define STBI_NO_STDIO 1\n#define STBI_NO_STDLIB 1\n#define STBIW_NO_STDLIB 1",
+        if (tfd) "#include <tinyfiledialogs.h>" else "",
+        if (tree_sitter) "#include <tree_sitter/api.h>" else "",
+    }), opts, libc);
+    dvui_mod.addImport("dvui-c", bindings);
+    publishCompatibilityModule(b, "dvui-c", bindings);
     return dvui_mod;
+}
+
+test "shared backend exports preserve single identity and last publication" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var graph: std.Build.Graph = undefined;
+    graph.arena = arena.allocator();
+    var b: std.Build = undefined;
+    b.graph = &graph;
+    b.modules = .empty;
+
+    inline for (.{ "render_backend", "sdl3", "dvui-c" }) |name| {
+        const first = b.createModule(.{});
+        publishCompatibilityModule(&b, name, first);
+        try std.testing.expectEqual(first, b.modules.get(name).?);
+        const owner = b.createModule(.{ .imports = &.{.{ .name = name, .module = first }} });
+        const second = b.createModule(.{});
+        publishCompatibilityModule(&b, name, second);
+        try std.testing.expectEqual(second, b.modules.get(name).?);
+        try std.testing.expectEqual(first, owner.import_table.get(name).?);
+    }
 }
 
 const ExampleOptions = struct {
@@ -1192,7 +1377,7 @@ fn addExample(
 
     if (opts.target.result.os.tag == .windows) {
         exe.win32_manifest = b.path("./src/main.manifest");
-        exe.subsystem = .Windows;
+        exe.subsystem = .windows;
 
         if (opts.accesskit.enabled()) {
             mod.linkSystemLibrary("ws2_32", .{});
@@ -1254,7 +1439,7 @@ fn addWebExample(
             .target = opts.target,
             .optimize = opts.optimize,
             .link_libc = false,
-            .strip = if (opts.optimize == .ReleaseFast or opts.optimize == .ReleaseSmall) true else false,
+            .strip = if (opts.optimize == .fast or opts.optimize == .small) true else false,
         }),
     };
     const web_test = b.addExecutable(exeOptions);
@@ -1293,7 +1478,6 @@ fn addWebExample(
     compile_step.dependOn(&b.addInstallFileWithDir(output, install_dir, "index.html").step);
     const web_js = b.path("src/backends/web.js");
     compile_step.dependOn(&b.addInstallFileWithDir(web_js, install_dir, "web.js").step);
-    b.addNamedLazyPath("web.js", web_js);
     compile_step.dependOn(&install_wasm.step);
     compile_step.dependOn(&install_noto.step);
 
@@ -1322,7 +1506,7 @@ fn addWebExample(
 /// ```
 pub fn svgPathToTvgPath(b: *std.Build, svg_path: std.Build.LazyPath) std.Build.LazyPath {
     // use fast and native options since this is just for building
-    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
+    const optimize: std.lang.Optimize = .fast;
     const target: std.Build.ResolvedTarget = b.graph.host;
     const svg2tvg_dep = b.lazyDependency("svg2tvg", .{ .optimize = optimize, .target = target }).?;
     const svg2tvg_exe = b.addExecutable(.{

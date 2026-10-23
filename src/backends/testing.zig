@@ -175,3 +175,15 @@ test {
 
 pub const dvui = @import("dvui");
 pub const std = @import("std");
+
+fn stbAllocator() std.mem.Allocator {
+    return if (@import("builtin").is_test) std.testing.allocator else std.heap.smp_allocator;
+}
+
+fn stbPanic(message: [*c]const u8) callconv(.c) noreturn {
+    std.debug.panic("STB assertion: {s}", .{std.mem.span(message)});
+}
+
+comptime {
+    if (!dvui.useLibc) @import("stb_libc.zig").Provider(stbAllocator, stbPanic).exportSymbols();
+}

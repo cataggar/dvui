@@ -174,7 +174,7 @@ pub fn show(self: *Debug) void {
 
         dvui.labelNoFmt(@src(), "Widget Id:", .{}, .{ .gravity_y = 0.5 });
 
-        var buf = [_]u8{0} ** 20;
+        var buf: [20]u8 = @splat(0);
         if (self.widget_id != .zero) {
             _ = std.fmt.bufPrint(&buf, "{x}", .{self.widget_id}) catch unreachable;
         }
@@ -183,7 +183,7 @@ pub fn show(self: *Debug) void {
         }, .{});
         te.deinit();
 
-        self.widget_id = @enumFromInt(std.fmt.parseInt(u64, std.mem.sliceTo(&buf, 0), 16) catch 0);
+        self.widget_id = @fromBackingInt(@intCast(std.fmt.parseInt(u64, std.mem.sliceTo(&buf, 0), 16) catch 0));
 
         var temp = (debug_target == .focused);
         if (dvui.checkbox(@src(), &temp, "Follow Focus", .{ .gravity_y = 0.5 })) {
@@ -1121,8 +1121,8 @@ pub fn ZigCodeFormatter(comptime T: type) type {
                 },
                 .@"struct" => |struct_info| {
                     try writer.writeAll(".{ ");
-                    inline for (struct_info.fields) |field| blk: {
-                        const ti = @typeInfo(field.type);
+                    inline for (struct_info.field_names, struct_info.field_types, struct_info.field_attrs) |name, Field, attrs| blk: {
+                        const ti = @typeInfo(Field);
                         // Ignore single item pointers
                         const ptr_info: ?std.builtin.Type.Pointer = switch (ti) {
                             .pointer => |ptr| ptr,
@@ -1135,11 +1135,11 @@ pub fn ZigCodeFormatter(comptime T: type) type {
                         if (ptr_info != null and ptr_info.?.size == .one and @typeInfo(ptr_info.?.child) != .array) {
                             continue;
                         }
-                        if (field.defaultValue() != null and ti == .optional and @field(self.value, field.name) == null) {
+                        if (attrs.defaultValue(Field) != null and ti == .optional and @field(self.value, name) == null) {
                             break :blk;
                         }
-                        try writer.print(".{s} = ", .{field.name});
-                        try writer.print("{f}", .{asZigCode(@field(self.value, field.name))});
+                        try writer.print(".{s} = ", .{name});
+                        try writer.print("{f}", .{asZigCode(@field(self.value, name))});
                         try writer.writeAll(", ");
                     }
                     try writer.writeAll("}");

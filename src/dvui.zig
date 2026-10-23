@@ -312,41 +312,7 @@ pub var reduce_motion: bool = false;
 /// If positions/sizes are getting into this range, then likely something is going wrong.
 pub const max_float_safe: f32 = 2_000_000; // 2000000 and 2e6 for searchability
 
-pub const c = @cImport({
-    // musl fails to compile saying missing "bits/setjmp.h", and nobody should
-    // be using setjmp anyway
-    @cDefine("_SETJMP_H", "1");
-
-    if (useFreeType) {
-        @cInclude("freetype/ftadvanc.h");
-        @cInclude("freetype/ftbbox.h");
-        @cInclude("freetype/ftbitmap.h");
-        @cInclude("freetype/ftcolor.h");
-        @cInclude("freetype/ftlcdfil.h");
-        @cInclude("freetype/ftsizes.h");
-        @cInclude("freetype/ftstroke.h");
-        @cInclude("freetype/fttrigon.h");
-    } else {
-        @cInclude("stb_truetype.h");
-    }
-
-    if (!useLibc) {
-        @cDefine("STBI_NO_STDIO", "1");
-        @cDefine("STBI_NO_STDLIB", "1");
-        @cDefine("STBIW_NO_STDLIB", "1");
-    }
-    @cInclude("stb_image.h");
-    @cInclude("stb_image_write.h");
-
-    // Used by native dialogs
-    if (useTinyFileDialogs) {
-        @cInclude("tinyfiledialogs.h");
-    }
-
-    if (useTreeSitter) {
-        @cInclude("tree_sitter/api.h");
-    }
-});
+pub const c = @import("dvui-c");
 
 pub var ft2lib: if (useFreeType) c.FT_Library else void = undefined;
 
@@ -386,7 +352,7 @@ pub const Id = enum(u64) {
         hash.update(std.mem.asBytes(&src.line));
         hash.update(std.mem.asBytes(&src.column));
         hash.update(std.mem.asBytes(&id_extra));
-        return @enumFromInt(hash.final());
+        return @fromBackingInt(@intCast(hash.final()));
     }
 
     /// Make a new id by combining id with some data, commonly a string key like `"_value"`.
@@ -395,11 +361,11 @@ pub const Id = enum(u64) {
         var h = fnv.init();
         h.value = id.asU64();
         h.update(input);
-        return @enumFromInt(h.final());
+        return @fromBackingInt(@intCast(h.final()));
     }
 
     pub fn asU64(self: Id) u64 {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 
     /// ALWAYS prefer using `asU64` unless a `usize` is required as it could
@@ -408,7 +374,7 @@ pub const Id = enum(u64) {
     /// Using an `Id` as `Options.id_extra` would be a valid use of this function
     pub fn asUsize(self: Id) usize {
         // usize might be u32 (like on wasm32)
-        return @truncate(@intFromEnum(self));
+        return @truncate(@backingInt(self));
     }
 
     pub fn format(self: *const Id, writer: *std.Io.Writer) !void {
@@ -475,12 +441,12 @@ pub const FormatErrorTrace = struct {
 
 pub fn logError(src: std.builtin.SourceLocation, err: anyerror, comptime fmt: []const u8, args: anytype) void {
     @branchHint(.cold);
-    const stack_trace_frame_count = @import("build_options").log_stack_trace orelse if (builtin.mode == .Debug) 12 else 0;
+    const stack_trace_frame_count = @import("build_options").log_stack_trace orelse if (builtin.mode == .debug) 12 else 0;
     const stack_trace_enabled = if (builtin.cpu.arch.isWasm()) false else stack_trace_frame_count > 0;
     const err_trace_enabled = if (@import("build_options").log_error_trace) |enabled| enabled else stack_trace_enabled;
 
     const error_trace_fmt, const err_trace_arg = if (err_trace_enabled)
-        .{ "\nError trace: {f}", FormatErrorTrace{ .error_trace = @errorReturnTrace(), .terminal_mode = std.log.terminalMode() }}
+        .{ "\nError trace: {f}", FormatErrorTrace{ .error_trace = @errorReturnTrace(), .terminal_mode = std.log.terminalMode() } }
     else
         .{ "{s}", "" }; // Keep arg count the same
 
@@ -489,9 +455,7 @@ pub fn logError(src: std.builtin.SourceLocation, err: anyerror, comptime fmt: []
             var addresses: [stack_trace_frame_count]usize = @splat(0);
             const stack_trace = std.debug.captureCurrentStackTrace(.{}, &addresses);
 
-            break :blk .{ "\nStack trace: {f}", std.debug.FormatStackTrace{
-                                    .stack_trace = stack_trace,
-                                    .terminal_mode = std.log.terminalMode() }};
+            break :blk .{ "\nStack trace: {f}", std.debug.FormatStackTrace{ .stack_trace = stack_trace, .terminal_mode = std.log.terminalMode() } };
         } else {
             break :blk .{ "{s}", "" }; // Needed to keep the arg count the sames
         }
@@ -591,7 +555,10 @@ pub fn fontCacheGet(font: Font) std.mem.Allocator.Error!*Font.Cache.Entry {
 ///
 /// Only valid between `Window.begin`and `Window.end`.
 pub fn svgToTvg(allocator: std.mem.Allocator, svg_bytes: []const u8) (std.mem.Allocator.Error || TvgError)![]const u8 {
-    if (comptime !useTvg) { comptime unreachable; }
+    if (comptime !useTvg) {
+        log.warn("svgToTvg requires TVG support", .{});
+        return error.tvgError;
+    }
     return tvg.tvg_from_svg(allocator, svg_bytes, .{}) catch |err| switch (err) {
         error.OutOfMemory => |e| return e,
         else => {
@@ -1584,7 +1551,7 @@ pub const EventMatchOptions = struct {
 
     /// (Only in Debug) If true, `eventMatch` will log a reason when returning
     /// false.  Useful to understand why you aren't matching some event.
-    debug: if (builtin.mode == .Debug) bool else void = if (builtin.mode == .Debug) false else undefined,
+    debug: if (builtin.mode == .debug) bool else void = if (builtin.mode == .debug) false else undefined,
 };
 
 /// Should e be processed by a widget with the given id and screen rect?
@@ -1600,7 +1567,7 @@ pub const EventMatchOptions = struct {
 /// Only valid between `Window.begin`and `Window.end`.
 pub fn eventMatch(e: *Event, opts: EventMatchOptions) bool {
     if (e.handled) {
-        if (builtin.mode == .Debug and opts.debug) {
+        if (builtin.mode == .debug and opts.debug) {
             log.debug("eventMatch {f} already handled", .{e});
         }
         return false;
@@ -1611,7 +1578,7 @@ pub fn eventMatch(e: *Event, opts: EventMatchOptions) bool {
         .window => {
             if (e.target_windowId) |wid| {
                 if (wid != opts.id) {
-                    if (builtin.mode == .Debug and opts.debug) {
+                    if (builtin.mode == .debug and opts.debug) {
                         log.debug("eventMatch {f} not to this window", .{e});
                     }
                     return false;
@@ -1626,7 +1593,7 @@ pub fn eventMatch(e: *Event, opts: EventMatchOptions) bool {
                     // processed (maybe the focus widget never showed up)
                     if (wid != opts.id) {
                         // not the focused window
-                        if (builtin.mode == .Debug and opts.debug) {
+                        if (builtin.mode == .debug and opts.debug) {
                             log.debug("eventMatch {f} (cleanup) focus not to this window", .{e});
                         }
                         return false;
@@ -1634,7 +1601,7 @@ pub fn eventMatch(e: *Event, opts: EventMatchOptions) bool {
                 } else {
                     if (e.target_widgetId != opts.id and (opts.focus_id == null or opts.focus_id.? != e.target_widgetId)) {
                         // not the focused widget
-                        if (builtin.mode == .Debug and opts.debug) {
+                        if (builtin.mode == .debug and opts.debug) {
                             log.debug("eventMatch {f} focus not to this widget", .{e});
                         }
                         return false;
@@ -1658,7 +1625,7 @@ pub fn eventMatch(e: *Event, opts: EventMatchOptions) bool {
             const cw = currentWindow();
             if (cw.dragging.state == .dragging and cw.dragging.name != null and (opts.drag_name == null or !std.mem.eql(u8, cw.dragging.name.?, opts.drag_name.?))) {
                 // a cross-widget drag is happening that we don't know about
-                if (builtin.mode == .Debug and opts.debug) {
+                if (builtin.mode == .debug and opts.debug) {
                     log.debug("eventMatch {f} drag_name ({?s}) given but current drag is ({?s})", .{ e, opts.drag_name, cw.dragging.name });
                 }
                 return false;
@@ -1666,7 +1633,7 @@ pub fn eventMatch(e: *Event, opts: EventMatchOptions) bool {
 
             if (me.floating_win != subwindowCurrentId()) {
                 // floating window is above us
-                if (builtin.mode == .Debug and opts.debug) {
+                if (builtin.mode == .debug and opts.debug) {
                     log.debug("eventMatch {f} floating window above", .{e});
                 }
                 return false;
@@ -1674,7 +1641,7 @@ pub fn eventMatch(e: *Event, opts: EventMatchOptions) bool {
 
             if (!opts.r.contains(me.p)) {
                 // mouse not in our rect
-                if (builtin.mode == .Debug and opts.debug) {
+                if (builtin.mode == .debug and opts.debug) {
                     log.debug("eventMatch {f} not in rect", .{e});
                 }
                 return false;
@@ -1685,7 +1652,7 @@ pub fn eventMatch(e: *Event, opts: EventMatchOptions) bool {
 
                 // prevents widgets that are scrolled off a
                 // scroll area from processing events
-                if (builtin.mode == .Debug and opts.debug) {
+                if (builtin.mode == .debug and opts.debug) {
                     log.debug("eventMatch {f} not in clip", .{e});
                 }
                 return false;
@@ -1703,7 +1670,7 @@ pub fn eventMatch(e: *Event, opts: EventMatchOptions) bool {
                     }
                 }
 
-                if (builtin.mode == .Debug and opts.debug) {
+                if (builtin.mode == .debug and opts.debug) {
                     log.debug("eventMatch {f} captured by other widget", .{e});
                 }
                 return false;
@@ -2486,12 +2453,13 @@ pub fn dialog(src: std.builtin.SourceLocation, user_struct: anytype, opts: Dialo
     }
 
     // add all fields of user_struct
-    inline for (@typeInfo(@TypeOf(user_struct)).@"struct".fields) |f| {
-        const ft = @typeInfo(f.type);
+    const info = @typeInfo(@TypeOf(user_struct)).@"struct";
+    inline for (info.field_names, info.field_types) |name, T| {
+        const ft = @typeInfo(T);
         if (ft == .pointer and (ft.pointer.size == .slice or (ft.pointer.size == .one and @typeInfo(ft.pointer.child) == .array))) {
-            dataSetSlice(opts.window, id, f.name, @field(user_struct, f.name));
+            dataSetSlice(opts.window, id, name, @field(user_struct, name));
         } else {
-            dataSet(opts.window, id, f.name, @field(user_struct, f.name));
+            dataSet(opts.window, id, name, @field(user_struct, name));
         }
     }
 
@@ -2818,9 +2786,9 @@ pub fn dropdownEnum(src: std.builtin.SourceLocation, T: type, choice: DropdownCh
 
     // Adjust selected index by 1 if the placeholder is showing
     const selected_index: ?usize = switch (choice) {
-        .choice => |ch| @intFromEnum(ch.*),
+        .choice => |ch| @backingInt(ch.*),
         .choice_nullable => |ch| if (ch.*) |_|
-            if (init_opts.null_selectable) @as(usize, @intFromEnum(ch.*.?)) + 1 else @intFromEnum(ch.*.?)
+            if (init_opts.null_selectable) @as(usize, @backingInt(ch.*.?)) + 1 else @backingInt(ch.*.?)
         else
             null,
     };
@@ -2829,7 +2797,7 @@ pub fn dropdownEnum(src: std.builtin.SourceLocation, T: type, choice: DropdownCh
     dd.init(
         src,
         switch (choice) {
-            .choice => |ch| .{ .selected_index = @intFromEnum(ch.*), .label = @tagName(ch.*) },
+            .choice => |ch| .{ .selected_index = @backingInt(ch.*), .label = @tagName(ch.*) },
             .choice_nullable => |ch| if (ch.* == null)
                 .{ .placeholder = init_opts.placeholder orelse dropdown_placeholder_default }
             else
@@ -2854,11 +2822,11 @@ pub fn dropdownEnum(src: std.builtin.SourceLocation, T: type, choice: DropdownCh
                 ret = true;
             }
         }
-        inline for (@typeInfo(T).@"enum".fields) |e| {
-            if (dd.addChoiceLabel(e.name)) {
+        inline for (@typeInfo(T).@"enum".field_names) |name| {
+            if (dd.addChoiceLabel(name)) {
                 switch (choice) {
                     inline else => |ch| {
-                        ch.* = @field(T, e.name);
+                        ch.* = @field(T, name);
                         ret = true;
                     },
                 }
@@ -4328,8 +4296,8 @@ pub fn sliderEntry(src: std.builtin.SourceLocation, comptime label_fmt: ?[]const
 
     if (text_mode) {
         var te_buf = dataGetSlice(null, b.data().id, "_buf", []u8) orelse blk: {
-            var buf = [_]u8{0} ** 20;
-            _ = std.fmt.bufPrintZ(&buf, "{d:0.3}", .{init_opts.value.*}) catch {};
+            var buf: [20]u8 = @splat(0);
+            _ = std.fmt.bufPrintSentinel(&buf, "{d:0.3}", .{init_opts.value.*}, 0) catch {};
             dataSetSlice(null, b.data().id, "_buf", &buf);
             break :blk dataGetSlice(null, b.data().id, "_buf", []u8).?;
         };
@@ -5017,7 +4985,7 @@ pub fn textEntryNumber(src: std.builtin.SourceLocation, comptime T: type, init_o
     // https://github.com/david-vanderson/dvui/issues/502
     const id = dvui.parentGet().extendId(src, opts.idExtra()).update(@typeName(T));
 
-    const buffer = dataGetSliceDefault(null, id, "buffer", []u8, &[_]u8{0} ** 32);
+    const buffer = dataGetSliceDefault(null, id, "buffer", []u8, &@as([32]u8, @splat(0)));
 
     // always initialize with value so we do the dataGet
     if (init_opts.value) |num| {
@@ -5187,7 +5155,7 @@ pub fn textEntryColor(src: std.builtin.SourceLocation, init_opts: TextEntryColor
 
     const id = dvui.parentGet().extendId(src, opts.idExtra());
 
-    const buffer = dataGetSliceDefault(null, id, "buffer", []u8, &[_]u8{0} ** 9);
+    const buffer = dataGetSliceDefault(null, id, "buffer", []u8, &@as([9]u8, @splat(0)));
 
     var te: TextEntryWidget = undefined;
     te.init(src, .{ .text = .{ .buffer = buffer }, .placeholder = init_opts.placeholder }, options);

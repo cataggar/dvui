@@ -231,10 +231,10 @@ test "DOCIMG easing plots" {
     try dvui.testing.settle(plot.frame);
     try t.saveImage(plot.frame, null, "easing-plot-linear.png");
 
-    inline for (@typeInfo(@This()).@"struct".decls) |decl| {
-        if (comptime std.mem.startsWith(u8, decl.name, "in") or std.mem.startsWith(u8, decl.name, "out")) {
-            plot.easing = @field(@This(), decl.name);
-            try t.saveImage(plot.frame, null, "easing-plot-" ++ decl.name ++ ".png");
+    inline for (@typeInfo(@This()).@"struct".decl_names) |name| {
+        if (comptime std.mem.startsWith(u8, name, "in") or std.mem.startsWith(u8, name, "out")) {
+            plot.easing = @field(@This(), name);
+            try t.saveImage(plot.frame, null, "easing-plot-" ++ name ++ ".png");
         }
     }
 }

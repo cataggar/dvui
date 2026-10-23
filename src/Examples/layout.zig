@@ -145,8 +145,8 @@ pub fn layout() void {
             _ = dvui.sliderEntry(@src(), "X: {d:0.2}", .{ .value = &layout_gravity_x, .min = 0, .max = 1.0, .interval = 0.01 }, .{});
             _ = dvui.sliderEntry(@src(), "Y: {d:0.2}", .{ .value = &layout_gravity_y, .min = 0, .max = 1.0, .interval = 0.01 }, .{});
             dvui.label(@src(), "Corner Radius", .{}, .{});
-            inline for (0.., @typeInfo(dvui.Rect).@"struct".fields) |i, field| {
-                _ = dvui.sliderEntry(@src(), field.name ++ ": {d:0}", .{ .min = 0, .max = 200, .interval = 1, .value = &@field(layout_corner_radius, field.name) }, .{ .id_extra = i });
+            inline for (0.., @typeInfo(dvui.Rect).@"struct".field_names) |i, name| {
+                _ = dvui.sliderEntry(@src(), name ++ ": {d:0}", .{ .min = 0, .max = 200, .interval = 1, .value = &@field(layout_corner_radius, name) }, .{ .id_extra = i });
             }
             if (Static.img) {
                 dvui.label(@src(), "Rotation", .{}, .{});
@@ -160,7 +160,7 @@ pub fn layout() void {
             dvui.label(@src(), "Expand", .{}, .{});
             var group = dvui.radioGroup(@src(), .{}, .{ .label = .{ .label_widget = .prev } });
             inline for (std.meta.tags(dvui.Options.Expand)) |opt| {
-                if (dvui.radio(@src(), layout_expand == opt, @tagName(opt), .{ .id_extra = @intFromEnum(opt) })) {
+                if (dvui.radio(@src(), layout_expand == opt, @tagName(opt), .{ .id_extra = @backingInt(opt) })) {
                     layout_expand = opt;
                 }
             }
@@ -185,7 +185,7 @@ pub fn layout() void {
             dvui.label(@src(), "Shrink", .{}, .{});
             var group = dvui.radioGroup(@src(), .{}, .{ .label = .{ .label_widget = .prev } });
             inline for (std.meta.tags(dvui.Options.Expand)) |opt| {
-                if (dvui.radio(@src(), Static.shrinkE == opt, @tagName(opt), .{ .id_extra = @intFromEnum(opt) })) {
+                if (dvui.radio(@src(), Static.shrinkE == opt, @tagName(opt), .{ .id_extra = @backingInt(opt) })) {
                     Static.shrinkE = opt;
                 }
             }
@@ -298,7 +298,7 @@ pub fn layout() void {
             defer hbox2.deinit();
             dvui.label(@src(), "FlexBox", .{}, .{});
             inline for (std.meta.tags(dvui.FlexBoxWidget.ContentPosition)) |opt| {
-                if (dvui.radio(@src(), layout_flex_content_justify == opt, @tagName(opt), .{ .id_extra = @intFromEnum(opt) })) {
+                if (dvui.radio(@src(), layout_flex_content_justify == opt, @tagName(opt), .{ .id_extra = @backingInt(opt) })) {
                     layout_flex_content_justify = opt;
                 }
             }
@@ -363,7 +363,7 @@ pub fn layout() void {
         dvui.label(@src(), "Direction:", .{}, .{});
         var group = dvui.radioGroup(@src(), .{}, .{ .label = .{ .label_widget = .prev } });
         inline for (std.meta.tags(dvui.enums.Direction)) |opt| {
-            if (dvui.radio(@src(), paned_autofit_direction == opt, @tagName(opt), .{ .id_extra = @intFromEnum(opt) })) {
+            if (dvui.radio(@src(), paned_autofit_direction == opt, @tagName(opt), .{ .id_extra = @backingInt(opt) })) {
                 paned_autofit_direction = opt;
             }
         }

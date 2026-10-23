@@ -27,9 +27,9 @@ pub const std_options: std.Options = .{
 };
 
 var gpa_instance: std.heap.DebugAllocator(.{}) = .init;
-const gpa = gpa_instance.allocator();
+const gpa = if (@import("builtin").target.cpu.arch.isWasm()) std.heap.wasm_allocator else gpa_instance.allocator();
 
-var touchPoints: [2]?dvui.Point.Physical = [_]?dvui.Point.Physical{null} ** 2;
+var touchPoints: [2]?dvui.Point.Physical = @splat(null);
 var orig_content_scale: f32 = 1.0;
 
 const zig_favicon = @embedFile("src/zig-favicon.png");
